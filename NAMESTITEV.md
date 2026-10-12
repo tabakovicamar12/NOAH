@@ -99,7 +99,7 @@ Odprite **http://localhost:8787**: to je točno to, kar bo tekel strežnik na Re
 
 1. https://vercel.com → **Add New → Project** → uvozite repozitorij. Nastavitve so v `vercel.json`, okvira ne izbirajte.
 2. **Environment Variables**:
-   - `DATABASE_URL`: tukaj **Transaction pooler** (port **6543**), ker Vercel uporablja kratkožive funkcije
+   - `DATABASE_URL`: enako kot zgoraj, **Session pooler** (port **5432**). Ne uporabite Transaction poolerja (port 6543): na njem vzporedne poizvedbe obvisijo.
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `JWT_SECRET`

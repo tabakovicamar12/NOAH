@@ -44,7 +44,8 @@ export function releaseDb(): void {
 async function postgresDb(url: string): Promise<Db> {
   const { default: postgres } = await import('postgres');
   const sql = postgres(url, {
-    // Supabase's transaction pooler (port 6543) does not support prepared statements.
+    // No prepared statements, so the pooler never has to track them. Use the session pooler (5432): on the
+    // transaction pooler (6543) queries queued behind each other on one connection can hang.
     prepare: false,
     max: Number(process.env['DB_POOL_MAX'] ?? 5),
     idle_timeout: 20,

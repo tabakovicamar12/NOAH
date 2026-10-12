@@ -37,7 +37,7 @@ export function loadConfig(): ServerConfig {
   }
   const databaseUrl = env('DATABASE_URL');
   if (production && !databaseUrl) {
-    throw new Error('DATABASE_URL must be set in production (Supabase → Connect → Transaction pooler).');
+    throw new Error('DATABASE_URL must be set in production (Supabase → Connect → Session pooler).');
   }
   const supabaseUrl = env('SUPABASE_URL');
   const supabaseServiceKey = env('SUPABASE_SERVICE_ROLE_KEY');

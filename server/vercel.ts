@@ -8,7 +8,7 @@ import { releaseDb } from './db';
  * Migrations are not run here: run `npm run cli -- migrate` once against Supabase before deploying.
  */
 
-// A small pool per instance: one request opens at most two connections to the transaction pooler.
+// A small pool per instance: one request opens at most two connections to the session pooler.
 process.env['DB_POOL_MAX'] ??= '2';
 
 const app = createApp(loadConfig());
