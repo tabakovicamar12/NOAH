@@ -1,0 +1,27 @@
+# Render Blueprint: one Node web service that serves the AON API (/api/v1) and the PWA.
+# Render → New → Blueprint → connect the repository; then fill in the variables marked sync: false.
+services:
+  - type: web
+    name: aon
+    runtime: node
+    region: frankfurt # EU, next to Supabase eu-central-1
+    plan: starter # "free" works too, but sleeps after 15 min idle (first request then takes ~1 min)
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run start:prod
+    healthCheckPath: /api/v1/health
+    autoDeploy: false
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false # Supabase → Connect → Session pooler (port 5432)
+      - key: SUPABASE_URL
+        sync: false # https://<project-ref>.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false # Supabase → Project Settings → API Keys → service_role (secret)
+      - key: SUPABASE_PHOTO_BUCKET
+        value: photos

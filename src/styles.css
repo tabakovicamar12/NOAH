@@ -1,0 +1,200 @@
+@import 'tailwindcss';
+
+/* Archivo, self-hosted so the PWA renders correctly offline. Variable wght 100–900, wdth 62–125. */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  src: url('/fonts/archivo-latin-ext-standard-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  src: url('/fonts/archivo-latin-standard-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@theme {
+  --font-sans: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+
+  /* World: galvanised ground, tag stock, NOAH charcoal + gold, inspection-tag states. */
+  --color-ground: #e4e5e1;
+  --color-ground-deep: #d3d5d0;
+  --color-stock: #fafaf7;
+  --color-charcoal: #363636;
+  --color-charcoal-deep: #262626;
+  --color-ink: #1a1a1a;
+  --color-ink-muted: #4a4a47;
+  --color-on-dark-muted: #cfcfc9;
+  --color-rule-soft: #b6b8b3;
+  --color-gold: #c1a050;
+  --color-gold-pale: #efe3c2;
+  /* Secondary text on gold: 5.3:1 on #C1A050, so it holds in sunlight. */
+  --color-gold-ink: #3a2e10;
+  --color-done: #00843d;
+  --color-done-pale: #d9efe2;
+  --color-hold: #d2001f;
+  --color-hold-pale: #f9dade;
+  --color-hold-ink: #a3001a;
+
+  --text-code: 2.5rem;
+  --text-timer: 5.5rem;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    color-scheme: light;
+  }
+  body {
+    background: var(--color-ground);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: var(--color-gold);
+    color: var(--color-ink);
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-ink);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 6px var(--color-gold);
+  }
+  input,
+  textarea,
+  select {
+    caret-color: var(--color-ink);
+  }
+  a {
+    text-underline-offset: 0.2em;
+    text-decoration-thickness: 2px;
+  }
+  * {
+    scrollbar-color: var(--color-charcoal) var(--color-ground-deep);
+  }
+  button:not(:disabled),
+  [role='button'] {
+    cursor: pointer;
+  }
+}
+
+@utility font-cond {
+  font-stretch: 68%;
+  font-weight: 800;
+  letter-spacing: 0.005em;
+}
+@utility font-cond-tight {
+  font-stretch: 62%;
+  font-weight: 850;
+  letter-spacing: 0.01em;
+}
+@utility label-caps {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/*
+ * The inspection tag: clipped eyelet end with a punched hole.
+ * Status is carried by fill AND by the label, never by colour alone.
+ */
+@utility tag-shape {
+  position: relative;
+  clip-path: polygon(1.1rem 0, 100% 0, 100% 100%, 1.1rem 100%, 0 calc(100% - 1.1rem), 0 1.1rem);
+  padding-left: 2rem;
+}
+@utility tag-shape-sm {
+  position: relative;
+  clip-path: polygon(0.6rem 0, 100% 0, 100% 100%, 0.6rem 100%, 0 calc(100% - 0.6rem), 0 0.6rem);
+  padding-left: 1.5rem;
+}
+
+@layer components {
+  /* Large glove-friendly checkbox: charcoal box, gold tick. */
+  .aon-check {
+    appearance: none;
+    flex-shrink: 0;
+    width: 2rem;
+    height: 2rem;
+    cursor: pointer;
+    border: 2px solid var(--color-charcoal);
+    background: var(--color-stock) center / 1.4rem no-repeat;
+  }
+  .aon-check:checked {
+    background-color: var(--color-charcoal);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%23C1A050%27 stroke-width=%273.5%27%3E%3Cpath d=%27M5 12l5 5 9-10%27/%3E%3C/svg%3E");
+  }
+  .tag-eyelet {
+    position: absolute;
+    left: 0.55rem;
+    top: 50%;
+    width: 0.8rem;
+    height: 0.8rem;
+    margin-top: -0.4rem;
+    border-radius: 9999px;
+    background: var(--color-ground);
+    box-shadow: inset 0 0 0 2px var(--color-charcoal);
+  }
+  .tag-sm .tag-eyelet {
+    left: 0.4rem;
+    width: 0.55rem;
+    height: 0.55rem;
+    margin-top: -0.275rem;
+  }
+  /* NEW tag outline: drawn by a filter on the host so the clipped eyelet corners keep their edge. */
+  .tag-outline {
+    filter: drop-shadow(2px 0 0 var(--color-charcoal)) drop-shadow(-2px 0 0 var(--color-charcoal))
+      drop-shadow(0 2px 0 var(--color-charcoal)) drop-shadow(0 -2px 0 var(--color-charcoal));
+  }
+  /* Pending sync: the stub edge is dashed until the server has it. */
+  .stub-pending {
+    background-image: repeating-linear-gradient(
+      to bottom,
+      var(--color-charcoal) 0 6px,
+      transparent 6px 11px
+    );
+    background-size: 3px 100%;
+    background-repeat: no-repeat;
+    background-position: right 0.4rem top 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
