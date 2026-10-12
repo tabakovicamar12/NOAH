@@ -193,13 +193,17 @@ export class SyncEngine {
           return processed;
         }
         if (err.transient && attempts < MAX_TRANSIENT_ATTEMPTS) {
-          await this.db.syncQueue.update(seq, {
-            attempts,
-            lastError: err.message,
-            nextAttemptAt: Date.now() + backoffMs(attempts),
-          });
+          const nextAttemptAt = Date.now() + backoffMs(attempts);
+          await this.db.syncQueue.update(seq, { attempts, lastError: err.message, nextAttemptAt });
           if (err.kind === 'NETWORK' || err.kind === 'TIMEOUT') {
-            this.phase.set('WAITING_FOR_NETWORK');
+            // Still online (e.g. a timeout while /health answers): retry on the backoff timer, since no
+            // reconnect event will come. Really offline: the reconnect triggers the next run.
+            if (this.network.online()) {
+              this.phase.set('BACKOFF');
+              this.scheduleBackoff(nextAttemptAt);
+            } else {
+              this.phase.set('WAITING_FOR_NETWORK');
+            }
             return processed;
           }
           continue;

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { I18nService } from '../../core/i18n/i18n.service';
 import type { SummaryDetailResponse } from '../../core/models/api.models';
 import type { PhotoCategory, QuantityUnit } from '../../core/models/domain.models';
@@ -219,7 +219,11 @@ export class ReportReviewComponent {
   });
 
   constructor() {
-    effect(() => void this.fetch(this.summaryId()));
+    // Track only the id: fetch() reads `state`, which would otherwise re-run this effect after every load.
+    effect(() => {
+      const id = this.summaryId();
+      untracked(() => void this.fetch(id));
+    });
   }
 
   protected duration(minutes: number): string {

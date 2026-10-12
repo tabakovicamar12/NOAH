@@ -38,8 +38,11 @@ export const resilienceInterceptor: HttpInterceptorFn = (req, next) => {
     tap<HttpEvent<unknown>>(() => network.reportReachable()),
     catchError((err: unknown) => {
       const apiError = toApiError(err);
-      if (apiError.kind === 'NETWORK' || apiError.kind === 'TIMEOUT') {
+      if (apiError.kind === 'NETWORK') {
         network.reportUnreachable();
+      } else if (apiError.kind === 'TIMEOUT') {
+        // One slow request does not mean the server is gone: let the quick /health probe decide.
+        void network.probe();
       } else {
         network.reportReachable();
       }

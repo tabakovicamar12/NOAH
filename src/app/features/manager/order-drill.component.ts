@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { I18nService } from '../../core/i18n/i18n.service';
 import type { WorkOrderDetailResponse } from '../../core/models/api.models';
 import { PHOTO_CATEGORIES, type PhotoCategory, type WorkOrderStatus } from '../../core/models/domain.models';
@@ -314,7 +314,7 @@ export class OrderDrillComponent {
   constructor() {
     effect(() => {
       const id = this.orderId();
-      void this.fetch(id);
+      untracked(() => void this.fetch(id));
     });
   }
 

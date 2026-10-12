@@ -30,6 +30,17 @@ export function getDb(config: ServerConfig): Promise<Db> {
   return shared;
 }
 
+/**
+ * Drops the shared pool and closes it in the background. Serverless hosts freeze the process between
+ * requests, which silently kills idle sockets; the next query on such a socket would hang until the
+ * function times out. Releasing the pool when no request is running means every burst starts fresh.
+ */
+export function releaseDb(): void {
+  const current = shared;
+  shared = null;
+  void current?.then((db) => db.close()).catch(() => undefined);
+}
+
 async function postgresDb(url: string): Promise<Db> {
   const { default: postgres } = await import('postgres');
   const sql = postgres(url, {
