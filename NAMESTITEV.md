@@ -118,9 +118,9 @@ Odprite **http://localhost:8787**: to je točno to, kar bo tekel strežnik na Re
   - iPhone Safari: *Deli* → *Dodaj na začetni zaslon*
 - **Posodobitve:** ob novi objavi aplikacija pokaže »Na voljo je nova različica AON« → *Posodobi*. Neposlani vnosi ostanejo na napravi.
 
-## 8. GDPR: kaj mora urediti NOAH
+## 8. GDPR: kaj mora urediti upravljavec (podjetje, ki uporablja AON)
 
-- [ ] **Obvestilo o zasebnosti** (`/privacy`) je osnutek. Pred objavo naj ga pregleda pravnik. Kontaktni e-naslov je v `src/environments/environment.ts` (`privacyContact`).
+- [ ] **Obvestilo o zasebnosti** (`/privacy`) je vzorec. Pred uporabo s pravimi podatki ga upravljavec dopolni s svojimi podatki in kontaktom, pregleda pa ga pravnik.
 - [ ] **Pogodbe o obdelavi (DPA)** s Supabase, Render ali Vercel (vsi jih ponujajo v nastavitvah ali na spletni strani).
 - [ ] **Roki hrambe** fotografij in poročil (evidence delovnega časa po delovni zakonodaji).
 - [ ] **Evidenca dejavnosti obdelave** in obvestilo zaposlenim.

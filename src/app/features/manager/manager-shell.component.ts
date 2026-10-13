@@ -30,7 +30,7 @@ interface NavItem {
     <div class="min-h-dvh lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] print:block">
       <aside class="no-print sticky top-0 z-40 flex flex-col bg-charcoal text-white lg:h-dvh">
         <div class="flex items-center justify-between gap-3 px-4 py-3 lg:px-5 lg:py-5">
-          <aon-logo [size]="1.875" [sub]="i18n.t('app.company')" />
+          <aon-logo [size]="1.875" />
           <div class="flex items-center gap-2 lg:hidden">
             <aon-network-status [onDark]="true" />
             <button

@@ -7,5 +7,4 @@ export const environment: AonEnvironment = {
   useMockBackend: true,
   requestTimeoutMs: 15_000,
   heartbeatMs: 30_000,
-  privacyContact: 'zasebnost@noah.si',
 };

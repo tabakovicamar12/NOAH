@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-/** AON wordmark set in condensed Archivo with the NOAH gold eyelet. */
+/** AON wordmark set in condensed Archivo with the gold eyelet of an inspection tag. */
 @Component({
   selector: 'aon-logo',
   changeDetection: ChangeDetectionStrategy.OnPush,

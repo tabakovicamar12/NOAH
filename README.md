@@ -1,6 +1,6 @@
 # AON
 
-Terensko beleženje dela za NOAH: delovni nalogi, čas prihoda in odhoda, količine, fotografije, glasovni vnos in dnevna poročila. Deluje kot PWA (namesti se na telefon) in deluje tudi brez povezave.
+Terensko beleženje dela za gradbene in terenske ekipe: delovni nalogi, čas prihoda in odhoda, količine, fotografije, glasovni vnos in dnevna poročila. Deluje kot PWA (namesti se na telefon) in deluje tudi brez povezave.
 
 - **Delavec** (telefon): ZAČNI DELO / KONČAJ DELO, nalogi, količine, opombe in problemi, fotografije, 🎤 GOVORI, dnevno poročilo.
 - **Vodja** (računalnik ali tablica): pregled dneva, seznam projektov, nov delovni nalog, pregled in potrditev poročil, PDF.
@@ -56,3 +56,17 @@ Vsi ukazi: `npm run cli -- help`.
 npm run typecheck            # TypeScript za aplikacijo in strežnik
 npm run build                # aplikacija + strežnik
 ```
+
+## Licence uporabljenih knjižnic in virov
+
+Aplikacija uporablja samo odprtokodne knjižnice z dovoljujočimi licencami. Celoten seznam z besedili licenc se ob gradnji objavi kot `/3rdpartylicenses.txt`.
+
+| Vir | Licenca |
+|---|---|
+| Angular, Hono, @hono/node-server, jose | MIT |
+| Dexie, RxJS, PGlite | Apache-2.0 |
+| Lucide (ikone) | ISC |
+| postgres (postgres.js) | Unlicense |
+| Pisava Archivo (The Archivo Project Authors) | SIL Open Font License 1.1, `public/fonts/OFL.txt` |
+
+Ikona aplikacije in logotip AON sta izdelana posebej za ta projekt. Demo podatki (imena, projekti, objekti) so izmišljeni.

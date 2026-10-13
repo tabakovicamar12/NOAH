@@ -24,7 +24,7 @@ import { StatusTagComponent } from '../../shared/ui/status-tag.component';
       <!-- Brand panel -->
       <section class="relative flex flex-col bg-charcoal px-4 pb-8 pt-[calc(env(safe-area-inset-top)+1rem)] text-white sm:px-8 lg:px-12 lg:pb-12 lg:pt-10">
         <div class="flex items-center justify-between gap-3">
-          <aon-logo [size]="2" [sub]="i18n.t('app.company')" />
+          <aon-logo [size]="2" />
           <div class="flex items-center gap-2">
             <aon-network-status [onDark]="true" />
             <aon-language-switch [onDark]="true" />

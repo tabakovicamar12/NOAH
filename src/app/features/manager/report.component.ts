@@ -59,7 +59,7 @@ const STATUS_RANK: Readonly<Record<WorkOrderStatus, number>> = { ISSUE: 0, IN_PR
       @if (data(); as d) {
         <article class="sheet mx-auto max-w-[210mm] bg-white px-[12mm] py-[12mm] text-ink shadow-[0_18px_40px_-20px_rgb(0_0_0/0.45)] print:max-w-none print:p-0 print:shadow-none">
           <header class="flex items-start justify-between gap-6 border-b-[3px] border-charcoal pb-4">
-            <aon-logo [size]="2" [sub]="i18n.t('app.company')" />
+            <aon-logo [size]="2" />
             <div class="text-right">
               <p class="font-cond-tight text-3xl leading-none">{{ i18n.t('pdf.title') }}</p>
               <p class="mt-1 font-semibold">{{ i18n.dateLong(d.date) }}</p>

@@ -1,6 +1,5 @@
 import { Location } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { environment } from '../../../environments/environment';
 import { I18nService } from '../../core/i18n/i18n.service';
 import type { TranslationKey } from '../../core/i18n/sl';
 import { IconComponent } from '../../shared/ui/icon.component';
@@ -27,7 +26,7 @@ import { LogoComponent } from '../../shared/ui/logo.component';
       @for (s of sections; track s.title) {
         <section class="mt-10">
           <h2 class="font-cond text-2xl">{{ i18n.t(s.title) }}</h2>
-          <p class="mt-2 max-w-[68ch] text-lg leading-relaxed">{{ i18n.t(s.body, { contact: contact }) }}</p>
+          <p class="mt-2 max-w-[68ch] text-lg leading-relaxed">{{ i18n.t(s.body) }}</p>
         </section>
       }
     </main>
@@ -36,7 +35,6 @@ import { LogoComponent } from '../../shared/ui/logo.component';
 export class PrivacyPolicyComponent {
   protected readonly i18n = inject(I18nService);
   private readonly location = inject(Location);
-  protected readonly contact = environment.privacyContact;
   protected readonly sections: ReadonlyArray<{ title: TranslationKey; body: TranslationKey }> = [
     { title: 'privacy.whoTitle', body: 'privacy.who' },
     { title: 'privacy.whatTitle', body: 'privacy.what' },

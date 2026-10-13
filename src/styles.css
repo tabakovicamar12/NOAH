@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 
-/* Archivo, self-hosted so the PWA renders correctly offline. Variable wght 100–900, wdth 62–125. */
+/* Archivo © The Archivo Project Authors, SIL Open Font License 1.1 (public/fonts/OFL.txt).
+   Self-hosted so the PWA renders correctly offline. Variable wght 100–900, wdth 62–125. */
 @font-face {
   font-family: 'Archivo';
   font-style: normal;
@@ -25,7 +26,7 @@
 @theme {
   --font-sans: 'Archivo', ui-sans-serif, system-ui, sans-serif;
 
-  /* World: galvanised ground, tag stock, NOAH charcoal + gold, inspection-tag states. */
+  /* World: galvanised ground, tag stock, charcoal + gold, inspection-tag states. */
   --color-ground: #e4e5e1;
   --color-ground-deep: #d3d5d0;
   --color-stock: #fafaf7;

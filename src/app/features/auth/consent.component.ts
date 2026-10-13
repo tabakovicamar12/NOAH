@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, ElementRef, afterNextRender, inject, signal, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { environment } from '../../../environments/environment';
 import { AuthService } from '../../core/auth/auth.service';
 import { ConsentService } from '../../core/auth/consent.service';
 import { homeFor } from '../../core/auth/guards';
@@ -39,7 +38,7 @@ import { LogoComponent } from '../../shared/ui/logo.component';
             @for (p of points; track p.key) {
               <li class="flex gap-3 py-3.5">
                 <aon-icon [name]="p.icon" [size]="24" class="mt-0.5 text-gold-ink" />
-                <p class="leading-snug">{{ i18n.t(p.key, { contact: contact }) }}</p>
+                <p class="leading-snug">{{ i18n.t(p.key) }}</p>
               </li>
             }
           </ul>
@@ -75,7 +74,6 @@ export class ConsentComponent {
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
 
   protected readonly version = CONSENT_VERSION;
-  protected readonly contact = environment.privacyContact;
   protected readonly busy = signal(false);
   protected readonly points: ReadonlyArray<{ key: TranslationKey; icon: IconName }> = [
     { key: 'consent.p1', icon: 'clock' },

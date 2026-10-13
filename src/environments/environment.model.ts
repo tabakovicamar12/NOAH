@@ -8,5 +8,4 @@ export interface AonEnvironment {
   readonly requestTimeoutMs: number;
   /** Interval between connectivity heartbeats while online, ms. */
   readonly heartbeatMs: number;
-  readonly privacyContact: string;
 }
