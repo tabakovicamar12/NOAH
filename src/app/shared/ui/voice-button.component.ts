@@ -29,8 +29,7 @@ const FAILURE_TEXT: Readonly<Record<SpeechFailure, TranslationKey>> = {
     @if (mine() && speech.listening()) {
       <button
         type="button"
-        class="flex w-full items-center justify-center gap-2.5 bg-charcoal font-cond text-white"
-        [class]="compact() ? 'min-h-12 text-lg' : 'min-h-16 text-xl'"
+        class="w-btn w-btn-dark"
         (click)="stop()"
       >
         <span class="relative grid size-4 place-items-center" aria-hidden="true">
@@ -39,22 +38,21 @@ const FAILURE_TEXT: Readonly<Record<SpeechFailure, TranslationKey>> = {
         </span>
         {{ i18n.t('voice.stop') }}
       </button>
-      <p class="mt-1.5 min-h-6 text-[0.95rem] font-semibold text-ink-muted" aria-live="polite">
+      <p class="w-muted w-small mt-1.5 min-h-6" aria-live="polite">
         {{ speech.interim() || i18n.t('voice.listening') }}
       </p>
     } @else {
       <button
         type="button"
-        class="flex w-full items-center justify-center gap-2 bg-stock font-cond ring-2 ring-inset ring-charcoal disabled:opacity-50"
-        [class]="compact() ? 'min-h-12 text-lg' : 'min-h-16 text-xl'"
+        class="w-btn w-btn-line"
         [disabled]="!speech.supported || !network.online() || (speech.listening() && !mine())"
         [attr.aria-describedby]="hintId"
         (click)="start()"
       >
-        <aon-icon name="mic" [size]="compact() ? 18 : 22" [stroke]="2.5" />{{ i18n.t('order.speak') }}
+        <aon-icon name="mic" [size]="18" [stroke]="2" />{{ i18n.t('order.speak') }}
       </button>
       @if (unavailable(); as reason) {
-        <p [id]="hintId" class="mt-1.5 text-sm font-semibold text-ink-muted">{{ i18n.t(reason) }}</p>
+        <p [id]="hintId" class="w-muted w-small mt-1.5">{{ i18n.t(reason) }}</p>
       }
     }
 

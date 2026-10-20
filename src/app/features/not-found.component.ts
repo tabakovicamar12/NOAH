@@ -8,11 +8,11 @@ import { LogoComponent } from '../shared/ui/logo.component';
   imports: [RouterLink, LogoComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <main class="grid min-h-dvh place-items-center bg-ground px-4">
-      <div class="text-center">
-        <aon-logo [size]="2.5" />
-        <h1 class="mt-6 font-cond text-5xl">{{ i18n.t('notFound.title') }}</h1>
-        <a routerLink="/" class="mt-8 inline-flex min-h-14 items-center bg-charcoal px-6 font-cond text-xl text-white no-underline">
+    <main class="grid min-h-dvh place-items-center px-4">
+      <div class="w-full max-w-sm rounded-xl border border-[var(--color-line)] bg-white px-6 py-8 text-center shadow-[0_8px_24px_-18px_rgb(20_20_20/0.25)]">
+        <aon-logo [size]="1.3" />
+        <h1 class="mt-5 text-[clamp(1.35rem,1.2rem+0.6vw,1.65rem)] font-semibold tracking-tight">{{ i18n.t('notFound.title') }}</h1>
+        <a routerLink="/" class="mt-6 inline-flex min-h-11 items-center gap-2 rounded-lg bg-gold px-5 font-semibold text-charcoal no-underline">
           {{ i18n.t('notFound.home') }}
         </a>
       </div>

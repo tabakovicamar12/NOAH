@@ -1,6 +1,7 @@
 import { randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { SignJWT, jwtVerify } from 'jose';
+import { ROLES, type Role } from '../src/app/core/models/domain.models';
 import type { ServerConfig } from './config';
 
 const scrypt = promisify(scryptCb) as (password: string, salt: Buffer, keylen: number, options: { N: number; r: number; p: number }) => Promise<Buffer>;
@@ -26,9 +27,10 @@ export async function verifyPassword(password: string, stored: string): Promise<
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
+/** The role in a token is informational: every request reloads the account, so role changes apply at once. */
 export interface TokenClaims {
   readonly sub: string;
-  readonly role: 'WORKER' | 'MANAGER';
+  readonly role: Role;
 }
 
 export async function issueToken(config: ServerConfig, claims: TokenClaims): Promise<{ token: string; expiresAt: number }> {
@@ -47,8 +49,8 @@ export async function readToken(config: ServerConfig, token: string): Promise<To
   try {
     const { payload } = await jwtVerify(token, config.jwtSecret, { issuer: 'aon', algorithms: ['HS256'] });
     const role = payload['role'];
-    if (typeof payload.sub !== 'string' || (role !== 'WORKER' && role !== 'MANAGER')) return null;
-    return { sub: payload.sub, role };
+    if (typeof payload.sub !== 'string' || typeof role !== 'string' || !(ROLES as readonly string[]).includes(role)) return null;
+    return { sub: payload.sub, role: role as Role };
   } catch {
     return null;
   }

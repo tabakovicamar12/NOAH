@@ -328,30 +328,47 @@ interface MaterialRow {
     </div>
 
     <!-- Action bar -->
-    <div class="fixed inset-x-0 bottom-0 z-40 border-t-2 border-charcoal bg-ground lg:left-60">
+    <div class="form-bar fixed inset-x-0 bottom-0 z-40 border-t border-[var(--color-line)] bg-[var(--color-site)]">
       <div class="flex flex-wrap items-center justify-end gap-2 px-4 py-3 sm:px-6 lg:px-8">
         <p class="mr-auto hidden text-sm font-semibold text-ink-muted sm:block">{{ i18n.t('form.queueNote') }}</p>
         @if (!isPublished()) {
-          <button type="button" class="flex min-h-14 items-center gap-2 bg-stock px-5 font-cond text-xl ring-2 ring-inset ring-charcoal hover:bg-ground-deep disabled:opacity-50" [disabled]="busy()" (click)="save(false)">
+          <button type="button" class="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--color-line-strong)] bg-white px-4 font-semibold hover:bg-[var(--color-field)] disabled:opacity-50" [disabled]="busy()" (click)="save(false)">
             <aon-icon name="note" [size]="20" />{{ i18n.t('form.saveDraft') }}
           </button>
         }
-        <button type="button" class="flex min-h-14 items-center gap-2 bg-gold px-6 font-cond text-xl text-ink hover:brightness-95 disabled:opacity-50" [disabled]="busy()" (click)="save(true)">
-          <aon-icon name="check" [size]="22" [stroke]="3" />{{ isPublished() ? i18n.t('form.saveChanges') : i18n.t('form.assign') }}
+        <button type="button" class="flex min-h-11 items-center gap-2 rounded-lg bg-gold px-5 font-semibold text-charcoal shadow-sm hover:brightness-105 disabled:opacity-50" [disabled]="busy()" (click)="save(true)">
+          <aon-icon name="check" [size]="20" [stroke]="2.5" />{{ isPublished() ? i18n.t('form.saveChanges') : i18n.t('form.assign') }}
         </button>
       </div>
     </div>
   `,
   styles: `
+    /* The action bar starts where the manager sidebar ends (the shell's --side-w); full width on phones. */
+    @media (min-width: 901px) {
+      .form-bar {
+        left: var(--side-w, 16.9rem);
+      }
+    }
+    select.field {
+      appearance: none;
+      padding-right: 2.5rem;
+      background: #fff url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%236b6a65%27 stroke-width=%271.8%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3E%3Cpath d=%27m6 9 6 6 6-6%27/%3E%3C/svg%3E") no-repeat right 0.75rem center / 1.1rem;
+    }
+    select.field:disabled {
+      background-color: var(--color-field);
+    }
     .field {
       display: block;
       width: 100%;
-      min-height: 3.5rem;
-      border: 2px solid var(--color-charcoal);
+      min-height: 2.75rem;
+      border: 1px solid var(--color-line-strong);
+      border-radius: 0.5rem;
       background: #fff;
       padding: 0 0.85rem;
-      font-weight: 600;
+      font-weight: 400;
       outline: none;
+      box-shadow: 0 1px 2px rgb(20 20 20 / 0.04);
+      transition: border-color 160ms var(--ease-out-expo), box-shadow 160ms var(--ease-out-expo);
     }
     textarea.field {
       padding-top: 0.6rem;
@@ -362,11 +379,12 @@ interface MaterialRow {
       color: var(--color-ink-muted);
     }
     .field:focus-visible {
-      box-shadow: 0 0 0 4px var(--color-gold);
+      border-color: var(--color-gold);
+      box-shadow: 0 0 0 3px rgb(193 160 80 / 0.25);
       outline: none;
     }
     .field:disabled {
-      background: var(--color-ground-deep);
+      background-color: var(--color-field);
       color: var(--color-ink-muted);
       cursor: not-allowed;
     }
@@ -381,7 +399,7 @@ interface MaterialRow {
     .err {
       display: block;
       margin-top: 0.3rem;
-      font-weight: 700;
+      font-weight: 500;
       font-size: 0.9rem;
       color: var(--color-hold-ink);
     }
@@ -419,6 +437,7 @@ export class OrderFormComponent {
   protected readonly estimateHours = signal<string>('');
   protected readonly materials = signal<readonly MaterialRow[]>([]);
   protected readonly showErrors = signal(false);
+
   protected readonly busy = signal(false);
 
   private readonly source = signal<WorkOrder | null>(null);

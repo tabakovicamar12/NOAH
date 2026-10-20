@@ -17,11 +17,11 @@ const CHECK_EVERY_MS = 30 * 60_000;
   template: `
     @if (ready()) {
       <div
-        class="no-print fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[65] mx-auto flex max-w-xl items-center justify-between gap-3 bg-charcoal px-4 py-3 text-white shadow-[0_10px_30px_-10px_rgb(0_0_0/0.5)] lg:bottom-6 lg:right-6 lg:left-auto lg:mx-0"
+        class="no-print fixed inset-x-0 bottom-[calc(6.2rem+env(safe-area-inset-bottom))] z-[65] mx-auto flex max-w-xl items-center justify-between gap-3 rounded-xl bg-[var(--color-rail)] px-4 py-3 text-white shadow-[0_16px_40px_-16px_rgb(20_20_20/0.5)] lg:bottom-6 lg:right-6 lg:left-auto lg:mx-0"
         role="status"
       >
         <span class="flex items-center gap-2 font-semibold"><aon-icon name="refresh" [size]="20" class="text-gold" />{{ i18n.t('pwa.update') }}</span>
-        <button type="button" class="min-h-12 shrink-0 bg-gold px-4 font-cond text-lg text-ink" (click)="apply()">{{ i18n.t('pwa.reload') }}</button>
+        <button type="button" class="min-h-11 shrink-0 rounded-lg bg-gold px-4 font-semibold text-charcoal" (click)="apply()">{{ i18n.t('pwa.reload') }}</button>
       </div>
     }
   `,

@@ -3,7 +3,29 @@
  * All timestamps are epoch milliseconds (device clock); all dates are ISO `YYYY-MM-DD` in local time.
  */
 
-export type Role = 'WORKER' | 'MANAGER';
+/**
+ * Who does what (enforced by the server; the UI only hides what a role cannot do):
+ * - ADMIN (administrator): accounts, projects, objects, who leads which project or object; everything a manager can.
+ * - MANAGER (vodja): work orders and report approval on the projects the administrator assigned to them.
+ * - FOREMAN (delovodja): work orders and crews on the objects assigned to them; cannot approve reports.
+ * - WORKER (delavec): their own assigned orders, time, entries and daily report.
+ */
+export const ROLES = ['ADMIN', 'MANAGER', 'FOREMAN', 'WORKER'] as const;
+export type Role = (typeof ROLES)[number];
+
+/** Roles that work on the desk surface (/m). */
+export function isDeskRole(role: Role | null | undefined): boolean {
+  return role === 'ADMIN' || role === 'MANAGER' || role === 'FOREMAN';
+}
+
+/** Roles that may approve or return a worker's daily report. The one who records time never approves it. */
+export function canApproveReports(role: Role | null | undefined): boolean {
+  return role === 'ADMIN' || role === 'MANAGER';
+}
+
+export function isAdmin(role: Role | null | undefined): boolean {
+  return role === 'ADMIN';
+}
 
 export const WORK_ORDER_STATUSES = ['NEW', 'IN_PROGRESS', 'COMPLETED', 'ISSUE'] as const;
 export type WorkOrderStatus = (typeof WORK_ORDER_STATUSES)[number];
@@ -11,7 +33,8 @@ export type WorkOrderStatus = (typeof WORK_ORDER_STATUSES)[number];
 export const PHOTO_CATEGORIES = ['BEFORE', 'IN_PROGRESS', 'FINISHED', 'ISSUE'] as const;
 export type PhotoCategory = (typeof PHOTO_CATEGORIES)[number];
 
-export const QUANTITY_UNITS = ['PCS', 'M', 'M2', 'M3', 'H'] as const;
+/** Units of work quantity: pieces, length, area, volume, hours, mass (kg, t) and sets (kpl). */
+export const QUANTITY_UNITS = ['PCS', 'M', 'M2', 'M3', 'H', 'KG', 'T', 'KPL'] as const;
 export type QuantityUnit = (typeof QUANTITY_UNITS)[number];
 
 export type IsoDate = string & { readonly __brand: 'IsoDate' };
@@ -22,8 +45,6 @@ export interface User {
   readonly displayName: string;
   readonly role: Role;
   readonly crew?: string;
-  /** Manager who may add projects and objects in the app (granted with `npm run cli -- grant-projects`). */
-  readonly canManageProjects?: boolean;
 }
 
 /** Projekt: the client job, e.g. "Hiša Novak". Holds one or more objects. */
@@ -88,6 +109,8 @@ export interface TimeEntry {
   readonly userId: string;
   readonly kind: TimeEntryKind;
   readonly workOrderId: string | null;
+  /** The object the worker chose when starting the shift (SHIFT only; null when there was nothing to choose). */
+  readonly siteId?: string | null;
   readonly date: IsoDate;
   readonly startedAt: EpochMs;
   readonly endedAt: EpochMs | null;
@@ -158,6 +181,8 @@ export interface DailySummary {
   readonly date: IsoDate;
   readonly arrivalAt: EpochMs | null;
   readonly departureAt: EpochMs | null;
+  /** The object(s) chosen at ZAČNI DELO that day, "Projekt · Objekt"; null when none was chosen. */
+  readonly siteName?: string | null;
   readonly shiftMinutes: number;
   readonly orderMinutes: number;
   readonly lines: readonly ReportOrderLine[];

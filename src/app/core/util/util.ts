@@ -75,6 +75,12 @@ export async function attempt<T>(fn: () => Promise<T>): Promise<Result<T>> {
   }
 }
 
+/** Order and project numbers in natural order: 2026-999 before 2026-1000, missing numbers last. */
+export function compareCodes(a: string | null | undefined, b: string | null | undefined): number {
+  if (!a || !b) return a ? -1 : b ? 1 : 0;
+  return a.localeCompare(b, undefined, { numeric: true });
+}
+
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }

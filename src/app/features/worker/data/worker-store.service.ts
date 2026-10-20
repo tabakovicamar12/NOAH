@@ -11,6 +11,7 @@ import type {
   PhotoCategory,
   PhotoMeta,
   ReportOrderLine,
+  Site,
   TimeCorrection,
   TimeEntry,
   WorkOrderStatus,
@@ -19,7 +20,7 @@ import { NetworkStatusService } from '../../../core/network/network-status.servi
 import { SyncEngine } from '../../../core/sync/sync-engine.service';
 import { entityKeys, queueItem } from '../../../core/sync/sync-queue';
 import { ClockService } from '../../../core/ui/clock.service';
-import { minutesBetween, toIsoDate, uuid } from '../../../core/util/util';
+import { compareCodes, minutesBetween, toIsoDate, uuid } from '../../../core/util/util';
 
 /** Planned shift length used for the day-capacity bar. */
 export const SHIFT_CAPACITY_MINUTES = 8 * 60;
@@ -45,6 +46,8 @@ export class WorkflowError extends Error {
       | 'INVALID_INPUT'
       | 'INVALID_TIME'
       | 'REPORT_LOCKED'
+      | 'DAY_CLOSED'
+      | 'NO_SITE'
       | 'STORAGE_FULL',
   ) {
     super(code);
@@ -61,6 +64,14 @@ export interface ReportDraft {
 }
 
 const EMPTY_DRAFT: ReportDraft = { workDone: {}, materials: {}, comment: '', corrections: [] };
+
+/** An object the worker can choose at ZAČNI DELO. `assigned`: one of their open orders runs there. */
+export interface SiteOption {
+  readonly id: string;
+  readonly label: string;
+  readonly city: string;
+  readonly assigned: boolean;
+}
 
 /**
  * The worker's device-side state and every field action.
@@ -90,7 +101,7 @@ export class WorkerStore {
     async (uid): Promise<readonly LocalWorkOrder[]> => {
       if (!uid) return [];
       const list = await this.db.workOrders.where('ownerId').equals(uid).toArray();
-      return list.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || (a.code ?? '').localeCompare(b.code ?? ''));
+      return list.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || compareCodes(a.code, b.code));
     },
     [] as readonly LocalWorkOrder[],
   );
@@ -148,6 +159,31 @@ export class WorkerStore {
     null as ReportDraft | null,
   );
 
+  /** Cached so a shift can start on a site without signal. */
+  private readonly sites = liveSignal(
+    this.uid,
+    async (uid): Promise<readonly Site[]> => {
+      if (!uid) return [];
+      const value = (await this.db.kv.get(sitesKey(uid)))?.value;
+      return Array.isArray(value) ? (value as Site[]) : [];
+    },
+    [] as readonly Site[],
+  );
+
+  /** Objects of the worker's open orders first, then every other active object. */
+  readonly siteOptions = computed<readonly SiteOption[]>(() => {
+    const out = new Map<string, SiteOption>();
+    const byId = new Map(this.sites().map((s) => [s.id, s]));
+    for (const o of this.orders()) {
+      if (o.status === 'COMPLETED' || !o.siteId || out.has(o.siteId)) continue;
+      out.set(o.siteId, { id: o.siteId, label: o.siteName || o.location, city: byId.get(o.siteId)?.city ?? '', assigned: true });
+    }
+    for (const s of this.sites()) {
+      if (!out.has(s.id)) out.set(s.id, { id: s.id, label: `${s.projectName} · ${s.name}`, city: s.city, assigned: false });
+    }
+    return [...out.values()];
+  });
+
   readonly openShift = computed(() => this.dayEntries().find((e) => e.kind === 'SHIFT' && e.endedAt === null) ?? null);
   /** A shift left running from an earlier day. Its real end has to be declared, not tapped now. */
   readonly staleShift = computed(() => {
@@ -183,6 +219,40 @@ export class WorkerStore {
     return Math.max(...shifts.map((s) => s.endedAt ?? 0));
   });
   readonly declaredEnd = computed(() => this.todayShifts().some((s) => s.endSource === 'DECLARED'));
+
+  /** "Projekt · Objekt" of the object chosen for the running (or last) shift. */
+  readonly shiftSiteName = computed(() => this.siteLabel((this.openShift() ?? this.todayShifts().at(-1))?.siteId ?? null));
+  /** Every object chosen today, in order, for the daily report. */
+  readonly daySiteNames = computed(() => {
+    const ids = [...new Set(this.todayShifts().map((s) => s.siteId).filter((id): id is string => !!id))];
+    return ids.map((id) => this.siteLabel(id)).filter((l): l is string => !!l).join(', ') || null;
+  });
+
+  /** Open while the worker chooses an object for ZAČNI DELO. */
+  readonly sitePickerOpen = signal(false);
+  private pickResolve: ((siteId: string | null | undefined) => void) | null = null;
+
+  /** Resolves `undefined` when the worker cancels, `null` when no object exists yet. */
+  chooseSite(): Promise<string | null | undefined> {
+    const options = this.siteOptions();
+    if (options.length === 0) return Promise.resolve(null);
+    if (options.length === 1) return Promise.resolve(options[0]?.id ?? null);
+    this.pickResolve?.(undefined);
+    this.sitePickerOpen.set(true);
+    return new Promise((resolve) => (this.pickResolve = resolve));
+  }
+
+  resolveSite(siteId: string | undefined): void {
+    this.sitePickerOpen.set(false);
+    const resolve = this.pickResolve;
+    this.pickResolve = null;
+    resolve?.(siteId);
+  }
+
+  private siteLabel(siteId: string | null): string | null {
+    if (!siteId) return null;
+    return this.siteOptions().find((o) => o.id === siteId)?.label ?? null;
+  }
 
   /** Report lines assembled from today's records. Text fields carry the worker's notes as a starting point. */
   readonly reportLines = computed<readonly ReportOrderLine[]>(() => {
@@ -253,17 +323,21 @@ export class WorkerStore {
 
   // ---------- shift ----------
 
-  async startShift(): Promise<TimeEntry> {
+  /** ZAČNI DELO on the chosen object: records the worker, the object, the date and the time of arrival. */
+  async startShift(siteId: string | null): Promise<TimeEntry> {
     const uid = this.requireUid();
     if (this.staleShift()) throw new WorkflowError('STALE_SHIFT');
+    if (this.dayClosed()) throw new WorkflowError('DAY_CLOSED');
     const existing = this.openShift();
     if (existing) return existing;
+    if (siteId === null && this.siteOptions().length > 0) throw new WorkflowError('NO_SITE');
     const now = Date.now();
     const entry: LocalTimeEntry = {
       id: uuid(),
       userId: uid,
       kind: 'SHIFT',
       workOrderId: null,
+      siteId,
       date: toIsoDate(now),
       startedAt: now,
       endedAt: null,
@@ -316,6 +390,7 @@ export class WorkerStore {
 
   async startOrder(orderId: string): Promise<void> {
     const uid = this.requireUid();
+    if (this.dayClosed()) throw new WorkflowError('DAY_CLOSED');
     if (!this.openShift()) throw new WorkflowError('NO_SHIFT');
     if (this.staleShift()) throw new WorkflowError('STALE_SHIFT');
     const order = this.findOrder(orderId);
@@ -356,6 +431,7 @@ export class WorkerStore {
   /** Any crew member may finish the order for the whole crew; it stops only their own timer. */
   async finishOrder(orderId: string): Promise<void> {
     const uid = this.requireUid();
+    if (this.dayClosed()) throw new WorkflowError('DAY_CLOSED');
     const order = this.findOrder(orderId);
     if (!this.canTransition(order.status, 'COMPLETED')) throw new WorkflowError('INVALID_TRANSITION');
     const now = Date.now();
@@ -369,6 +445,7 @@ export class WorkerStore {
 
   async addQuantity(orderId: string, quantity: number): Promise<void> {
     const uid = this.requireUid();
+    if (this.dayClosed()) throw new WorkflowError('DAY_CLOSED');
     if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 100_000) throw new WorkflowError('INVALID_INPUT');
     const order = this.findOrder(orderId);
     const q = Math.round(quantity * 100) / 100;
@@ -376,6 +453,26 @@ export class WorkerStore {
     await this.db.transaction('rw', [this.db.logs, this.db.workOrders, this.db.syncQueue], async () => {
       await this.db.logs.add(log);
       await this.db.workOrders.update(orderId, { doneQty: Math.round((order.doneQty + q) * 100) / 100, dirty: 1, updatedAt: log.createdAt });
+      await this.db.syncQueue.add(queueItem(uid, entityKeys.order(orderId), { type: 'LOG_CREATE', payload: stripLocal(log) }));
+    });
+    this.sync.nudge();
+  }
+
+  /**
+   * Takes back a quantity logged by mistake. The wrong entry stays in the history; the correction is a
+   * negative entry with the reason, as on a site where nothing in the books is erased.
+   */
+  async correctQuantity(orderId: string, amount: number, reason: string): Promise<void> {
+    const uid = this.requireUid();
+    if (this.dayClosed()) throw new WorkflowError('DAY_CLOSED');
+    const order = this.findOrder(orderId);
+    const q = Math.round(amount * 100) / 100;
+    const why = reason.trim();
+    if (!Number.isFinite(q) || q <= 0 || q > order.doneQty || !why) throw new WorkflowError('INVALID_INPUT');
+    const log = this.newLog(uid, orderId, 'QUANTITY', -q, why.slice(0, 500));
+    await this.db.transaction('rw', [this.db.logs, this.db.workOrders, this.db.syncQueue], async () => {
+      await this.db.logs.add(log);
+      await this.db.workOrders.update(orderId, { doneQty: Math.round((order.doneQty - q) * 100) / 100, dirty: 1, updatedAt: log.createdAt });
       await this.db.syncQueue.add(queueItem(uid, entityKeys.order(orderId), { type: 'LOG_CREATE', payload: stripLocal(log) }));
     });
     this.sync.nudge();
@@ -469,6 +566,11 @@ export class WorkerStore {
     const s = this.summary();
     return !s || s.status === 'DRAFT' || s.status === 'RETURNED';
   });
+  /**
+   * Today's report is with the manager (submitted or approved): the day is closed. No new time or quantity
+   * is recorded, or it would be missing from the report the manager signs. Returning the report reopens it.
+   */
+  readonly dayClosed = computed(() => !this.reportEditable());
 
   async saveDraft(draft: ReportDraft): Promise<void> {
     const uid = this.requireUid();
@@ -493,6 +595,7 @@ export class WorkerStore {
       date,
       arrivalAt: this.arrivalAt(),
       departureAt: this.departureAt(),
+      siteName: this.daySiteNames(),
       shiftMinutes: this.shiftMinutes(),
       orderMinutes: this.orderMinutes(),
       lines,
@@ -533,6 +636,7 @@ export class WorkerStore {
     this.refreshing.set(true);
     try {
       const res = await this.api.workerOrders();
+      if (res.sites) await this.db.kv.put({ key: sitesKey(uid), value: res.sites });
       await this.db.transaction('rw', [this.db.workOrders], async () => {
         const local = await this.db.workOrders.where('ownerId').equals(uid).toArray();
         const dirty = new Set(local.filter((o) => o.dirty === 1).map((o) => o.id));
@@ -547,6 +651,15 @@ export class WorkerStore {
         const local = await this.db.summaries.get(remote.id);
         if (!local || local.synced === 1) await this.db.summaries.put({ ...remote, synced: 1 });
       }
+      // Today's records from the worker's other devices (or from before the app's storage was cleared).
+      // Anything this device has not sent yet stays as it is.
+      const day = await this.api.workerDay(date, new Date(`${date}T00:00:00`).getTime());
+      await this.db.transaction('rw', [this.db.timeEntries, this.db.logs], async () => {
+        const entries = new Map((await this.db.timeEntries.where('userId').equals(uid).toArray()).map((e) => [e.id, e.synced]));
+        await this.db.timeEntries.bulkPut(day.timeEntries.filter((e) => entries.get(e.id) !== 0).map((e) => ({ ...e, synced: 1 as const })));
+        const logs = new Map((await this.db.logs.where('userId').equals(uid).toArray()).map((l) => [l.id, l.synced]));
+        await this.db.logs.bulkPut(day.logs.filter((l) => logs.get(l.id) !== 0).map((l) => ({ ...l, synced: 1 as const })));
+      });
       this.refreshFailed.set(false);
     } catch (err: unknown) {
       console.warn('[AON] order refresh failed', err);
@@ -598,6 +711,10 @@ export class WorkerStore {
 
 function summaryId(uid: string, date: string): string {
   return `sum-${uid}-${date}`;
+}
+
+function sitesKey(uid: string): string {
+  return `worker-sites:${uid}`;
 }
 
 function draftKey(uid: string, date: string): string {

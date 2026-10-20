@@ -18,6 +18,12 @@ export const WORKER_ROUTES: Routes = [
     title: 'AON · Dnevno poročilo',
   },
   {
+    path: 'hours',
+    loadComponent: () => import('../../shared/worktime/work-record-page.component').then((m) => m.WorkRecordPageComponent),
+    data: { side: 'worker' },
+    title: 'AON · Moje ure',
+  },
+  {
     path: 'more',
     loadComponent: () => import('./more.component').then((m) => m.MoreComponent),
     title: 'AON · Več',

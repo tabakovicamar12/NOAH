@@ -14,7 +14,8 @@
     "cli:prod": "node dist/server/cli.mjs",
     "typecheck": "tsc -p server/tsconfig.json && tsc -p tsconfig.app.json --noEmit",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "test:api": "tsx server/api-smoke.ts"
   },
   "private": true,
   "packageManager": "npm@11.13.0",
@@ -28,6 +29,7 @@
     "@angular/service-worker": "^22.2.0",
     "@electric-sql/pglite": "^0.3.16",
     "@fontsource-variable/archivo": "^5.3.0",
+    "@fontsource-variable/inter": "^5.3.0",
     "@hono/node-server": "^1.19.17",
     "dexie": "^4.4.6",
     "hono": "^4.13.13",

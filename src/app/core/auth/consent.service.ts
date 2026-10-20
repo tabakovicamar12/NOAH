@@ -1,17 +1,17 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { DatabaseService } from '../db/database.service';
 import { CONSENT_VERSION } from '../models/domain.models';
 import { SyncEngine } from '../sync/sync-engine.service';
 import { uuid } from '../util/util';
 
-/** GDPR consent per user and notice version. Stored on the device and synced to the server. */
+/**
+ * Acknowledgement of the privacy notice, once per account and notice version. Stored on the device and on the
+ * server; a login on another device takes the server's record over (AuthService), so it is not asked again.
+ */
 @Injectable({ providedIn: 'root' })
 export class ConsentService {
   private readonly db = inject(DatabaseService).db;
   private readonly sync = inject(SyncEngine);
-
-  /** Ticked on the login form; the modal still appears on first login to present the full notice. */
-  readonly preAccepted = signal(false);
 
   async hasConsent(userId: string): Promise<boolean> {
     try {

@@ -205,6 +205,69 @@ update daily_summaries set orders_worked = (orders_worked #>> '{}')::jsonb where
 update daily_summaries set corrections = (corrections #>> '{}')::jsonb where jsonb_typeof(corrections) = 'string';
 `,
   },
+  {
+    id: '005_roles_and_scopes',
+    // Four roles (administrator, manager, foreman, worker). Managers lead projects, foremen lead objects; an
+    // administrator assigns both. Existing managers keep seeing what they saw: they are assigned to every project.
+    // The old "may add projects" flag becomes the administrator role, and a database without an administrator
+    // promotes its longest-standing active manager so someone can still manage accounts.
+    sql: `
+alter table users drop constraint if exists users_role_check;
+alter table users add constraint users_role_check check (role in ('ADMIN', 'MANAGER', 'FOREMAN', 'WORKER'));
+update users set role = 'ADMIN' where can_manage_projects;
+alter table users drop column if exists can_manage_projects;
+update users set role = 'ADMIN'
+  where id = (select id from users where role = 'MANAGER' and active order by created_at, id limit 1)
+    and not exists (select 1 from users where role = 'ADMIN' and active);
+
+create table if not exists project_managers (
+  project_id text not null references projects(id),
+  user_id    text not null references users(id),
+  primary key (project_id, user_id)
+);
+create index if not exists project_managers_user_idx on project_managers(user_id);
+
+create table if not exists site_foremen (
+  site_id text not null references sites(id),
+  user_id text not null references users(id),
+  primary key (site_id, user_id)
+);
+create index if not exists site_foremen_user_idx on site_foremen(user_id);
+
+insert into project_managers (project_id, user_id)
+  select p.id, u.id from projects p cross join users u where u.role = 'MANAGER'
+  on conflict do nothing;
+
+alter table project_managers enable row level security;
+alter table site_foremen enable row level security;
+`,
+  },
+  {
+    id: '006_project_numbers',
+    sql: `
+create table if not exists project_counters (
+  year integer primary key,
+  last integer not null
+);
+alter table project_counters enable row level security;
+`,
+  },
+  {
+    id: '007_more_units',
+    sql: `
+alter table work_orders drop constraint if exists work_orders_unit_check;
+alter table work_orders add constraint work_orders_unit_check check (unit in ('PCS', 'M', 'M2', 'M3', 'H', 'KG', 'T', 'KPL'));
+`,
+  },
+  {
+    id: '008_shift_site',
+    // ZAČNI DELO records the object the worker chose; the daily report keeps its name as it was that day.
+    sql: `
+alter table time_entries add column if not exists site_id text references sites(id);
+create index if not exists time_entries_site_idx on time_entries(site_id, date);
+alter table daily_summaries add column if not exists site_name text;
+`,
+  },
 ];
 
 export async function migrate(db: Db, log: (msg: string) => void = () => undefined): Promise<string[]> {

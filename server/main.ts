@@ -6,6 +6,7 @@ import { loadConfig } from './config';
 import { getDb } from './db';
 import { loadDotEnv } from './env-file';
 import { migrate } from './migrations';
+import { PAGE_HEADERS } from './page-headers';
 
 /**
  * Long-running server (Render, any Node host, local development).
@@ -21,6 +22,7 @@ if (config.staticDir) {
   app.use('*', async (c, next) => {
     await next();
     const path = c.req.path;
+    if (!path.startsWith('/api/')) for (const [k, v] of Object.entries(PAGE_HEADERS)) c.header(k, v);
     if (path === '/ngsw-worker.js' || path === '/ngsw.json' || path === '/index.html' || path === '/') {
       c.header('Cache-Control', 'no-cache');
     } else if (/-[A-Za-z0-9_]{8}\.(js|css)$/.test(path)) {
@@ -40,4 +42,5 @@ await migrate(db, (m) => console.log(`[AON] migration ${m}`));
 serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`[AON] listening on http://localhost:${info.port} (${config.databaseUrl ? 'Postgres' : 'PGlite ' + config.pgliteDir})`);
   if (config.staticDir) console.log(`[AON] serving app from ${config.staticDir}`);
+  if (config.production && !config.org.name) console.warn('[AON] ORG_NAME is not set: the privacy notice does not name the employer yet.');
 });

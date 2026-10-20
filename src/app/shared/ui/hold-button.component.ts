@@ -12,7 +12,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, input
   template: `
     <button
       type="button"
-      class="relative isolate flex w-full touch-none select-none items-center justify-between gap-4 overflow-hidden px-6 text-left font-cond transition-transform duration-150 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
+      class="hold relative isolate flex w-full touch-none select-none flex-col items-center justify-center overflow-hidden rounded-[0.6rem] px-6 text-center transition-transform duration-150 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
       [class]="toneClass()"
       [style.min-height.px]="height()"
       [disabled]="disabled()"
@@ -33,8 +33,8 @@ import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, input
         [style.width.%]="progress() * 100"
         aria-hidden="true"
       ></span>
-      <span class="text-[1.75rem] leading-none tracking-wide sm:text-[2rem]">{{ label() }}</span>
-      <span [id]="hintId" class="label-caps shrink-0 font-sans text-[0.75rem] opacity-90" [style.font-stretch.%]="100">
+      <span class="text-[1.15rem] font-semibold leading-tight tracking-[0.01em]">{{ label() }}</span>
+      <span [id]="hintId" class="shrink-0 text-[0.8rem] font-normal opacity-80">
         {{ holding() ? '…' : hint() }}
       </span>
     </button>
@@ -60,11 +60,11 @@ export class HoldButtonComponent {
   protected readonly toneClass = computed(() => {
     switch (this.tone()) {
       case 'charcoal':
-        return 'bg-charcoal text-white';
+        return 'bg-[var(--color-rail)] text-white';
       case 'hold':
         return 'bg-hold text-white';
       default:
-        return 'bg-gold text-ink';
+        return 'bg-gold text-[var(--color-charcoal)]';
     }
   });
   protected readonly fillClass = computed(() => (this.tone() === 'gold' ? 'bg-charcoal/25' : 'bg-white/25'));

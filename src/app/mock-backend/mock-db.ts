@@ -15,7 +15,15 @@ export interface MockUser extends User {
   readonly username: string;
   /** Demo backend only. A real server never stores plain passwords. */
   readonly password: string;
+  /** Missing means active (older demo rows). */
+  readonly active?: boolean;
+  /** Projects a manager leads. */
+  readonly projectIds?: readonly string[];
+  /** Objects a foreman leads. */
+  readonly siteIds?: readonly string[];
 }
+/** Projects and objects carry an archive flag on the demo server only (the shared domain types stay lean). */
+export type Archivable = { readonly active?: boolean };
 /** Server-side order row: `crewIds` is a multi-entry index so "orders for worker X" stays a lookup. */
 export interface MockOrder extends WorkOrder {
   readonly crewIds: readonly string[];

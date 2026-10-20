@@ -1,23 +1,21 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, OnInit, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { I18nService } from '../../core/i18n/i18n.service';
 import type { TranslationKey } from '../../core/i18n/sl';
 import type { OrderOverview, WorkerOverview, WorkerPresence } from '../../core/models/api.models';
-import type { DailySummaryStatus, QuantityUnit, Site, WorkOrderStatus } from '../../core/models/domain.models';
-import { DEMO_MODE } from '../../core/ui/demo-mode';
-import { formatDuration, isIsoDate, minutesToHours, toIsoDate } from '../../core/util/util';
-import { crewLabel } from '../../shared/ui/format';
-import { IconComponent, type IconName } from '../../shared/ui/icon.component';
+import type { DailySummaryStatus, QuantityUnit, WorkOrderStatus } from '../../core/models/domain.models';
+import { compareCodes, formatDuration, isIsoDate, toIsoDate } from '../../core/util/util';
+import { IconComponent } from '../../shared/ui/icon.component';
 import { ReportStatusComponent } from '../../shared/ui/report-status.component';
-import { StatusTagComponent } from '../../shared/ui/status-tag.component';
 import { progressRatio } from '../../shared/ui/tag-style';
 import { ManagerStore } from './data/manager-store.service';
 import { OrderDrillComponent } from './order-drill.component';
+import { avatarTone, initialsOf } from './person';
 import { ReportReviewComponent } from './report-review.component';
 
-type SortKey = 'status' | 'code' | 'title' | 'worker' | 'site' | 'today' | 'total' | 'progress';
-type View = 'orders' | 'workers';
+type SortKey = 'code' | 'title' | 'worker' | 'status' | 'progress';
 type Panel = { readonly kind: 'order'; readonly id: string } | { readonly kind: 'report'; readonly id: string };
+type StatusTab = 'ALL' | WorkOrderStatus;
 
 /** A row in the orders table: a server row, or an order saved on this device that is still on its way. */
 interface OrderRow extends OrderOverview {
@@ -26,401 +24,863 @@ interface OrderRow extends OrderOverview {
 }
 
 const STATUS_RANK: Readonly<Record<WorkOrderStatus, number>> = { ISSUE: 0, IN_PROGRESS: 1, NEW: 2, COMPLETED: 3 };
+/** Orders per table page; the manager pages through the rest. */
+const PAGE_SIZE = 8;
 const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FINISHED: 1, NOT_STARTED: 2 };
-const PRESENCE_STYLE: Readonly<Record<WorkerPresence, { readonly cls: string; readonly icon: IconName }>> = {
-  WORKING: { cls: 'bg-gold text-ink', icon: 'play' },
-  FINISHED: { cls: 'bg-charcoal text-white', icon: 'check' },
-  NOT_STARTED: { cls: 'bg-stock text-ink ring-2 ring-inset ring-charcoal', icon: 'minus' },
-};
 
+/**
+ * Work orders: the day, a search, a status filter with live counts and the table; the selected order
+ * opens in the inspector at the right edge without leaving the list.
+ */
 @Component({
   selector: 'aon-manager-overview',
-  imports: [RouterLink, IconComponent, StatusTagComponent, ReportStatusComponent, OrderDrillComponent, ReportReviewComponent],
+  imports: [RouterLink, IconComponent, ReportStatusComponent, OrderDrillComponent, ReportReviewComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '(document:keydown)': 'onKey($event)' },
   template: `
-    <div class="lg:grid" [class]="panel() ? 'xl:grid-cols-[minmax(0,1fr)_27rem]' : ''">
-      <div class="min-w-0 px-4 pb-10 pt-5 sm:px-6 lg:px-8 lg:pt-7">
-        <!-- Header -->
-        <header class="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-          <div>
-            <h1 class="font-cond-tight text-[2.5rem] leading-none sm:text-5xl">
-              {{ store.isToday() ? i18n.t('mgr.titleToday', { date: i18n.dateLong(store.date()) }) : i18n.dateLong(store.date()) }}
-            </h1>
-            <p class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-ink-muted">
-              @if (data(); as d) {
-                <span class="font-semibold">{{ i18n.t('mgr.subtitle', { sites: d.sites.length, workers: d.workers.length }) }}</span>
-              }
-              @if (demo) {
-                <span class="border-2 border-dashed border-charcoal px-2 py-0.5 label-caps text-ink">{{ i18n.t('common.demo') }}</span>
-              }
-            </p>
-          </div>
-          <div class="flex flex-wrap items-end gap-2">
-            <label class="block">
-              <span class="label-caps text-ink-muted">{{ i18n.t('mgr.date') }}</span>
-              <input
-                type="date"
-                class="mt-1 block min-h-12 border-2 border-charcoal bg-stock px-3 font-semibold outline-none focus:ring-4 focus:ring-gold"
-                [value]="store.date()"
-                [max]="today"
-                (change)="onDate($event)"
-              />
-            </label>
-            <button
-              type="button"
-              class="flex min-h-12 items-center gap-2 border-2 border-charcoal bg-stock px-4 font-cond text-lg hover:bg-ground-deep disabled:opacity-50"
-              [disabled]="store.state() === 'LOADING'"
-              (click)="store.load()"
-            >
-              <aon-icon name="refresh" [size]="18" [class.animate-spin]="store.state() === 'LOADING'" />{{ i18n.t('mgr.refresh') }}
-            </button>
-            <a routerLink="/m/orders/new" class="flex min-h-12 items-center gap-2 bg-charcoal px-5 font-cond text-lg text-white no-underline hover:bg-charcoal-deep">
-              <aon-icon name="plus" [size]="20" [stroke]="3" />{{ i18n.t('mgr.newOrder') }}
-            </a>
-            <a
-              routerLink="/m/report"
-              [queryParams]="{ date: store.date() }"
-              class="flex min-h-12 items-center gap-2 bg-gold px-5 font-cond text-lg text-ink no-underline hover:brightness-95"
-            >
-              <aon-icon name="printer" [size]="20" />{{ i18n.t('mgr.exportPdf') }}
-            </a>
-          </div>
-        </header>
+    <div class="page" [class.has-inspector]="!!panel()">
+      <div class="work">
+        <div class="topline">
+          <label class="day">
+            <span class="sr-only">{{ i18n.t('mgr.dayLabel') }}</span>
+            <span>{{ dayLabel() }}</span>
+            <aon-icon name="chevron-down" [size]="18" [stroke]="1.8" />
+            <input type="date" [value]="store.date()" [max]="today" (change)="onDate($event)" />
+          </label>
+        </div>
 
-        <!-- Truthful data state -->
+        <div class="titleline">
+          <h1 class="title">{{ mode() === 'workers' ? i18n.t('mgr.navTeam') : mode() === 'reviews' ? i18n.t('mgr.reviewsTitle') : i18n.t('mgr.navOrders') }}@if (scopeName()) {<span class="sr-only"> · {{ scopeName() }}</span>}</h1>
+          @if (mode() === 'orders') {
+            <a routerLink="/m/orders/new" class="new"><aon-icon name="plus" [size]="18" [stroke]="2.2" />{{ i18n.t('mgr.navNewOrder') }}</a>
+          }
+        </div>
+
+        <label class="search">
+          <span class="sr-only">{{ i18n.t('mgr.searchOrders') }}</span>
+          <aon-icon name="search" [size]="21" [stroke]="1.8" class="search-icon" />
+          <kbd class="kbd" aria-hidden="true">⌘K</kbd>
+          <input #search type="search" autocomplete="off" [placeholder]="i18n.t(mode() === 'workers' ? 'mgr.filterTeam' : mode() === 'reviews' ? 'mgr.searchReports' : 'mgr.searchOrders')" [value]="store.query()" (input)="store.query.set($any($event.target).value)" />
+        </label>
+
         @switch (store.state()) {
           @case ('CACHED') {
-            <p class="mt-5 flex items-center gap-2 border-2 border-dashed border-charcoal bg-stock px-4 py-3 font-semibold" role="status">
-              <aon-icon name="cloud-off" [size]="20" class="text-hold" />{{ i18n.t('mgr.offlineCached', { time: cachedAt() }) }}
-            </p>
+            <p class="banner" role="status"><aon-icon name="cloud-off" [size]="18" />{{ i18n.t('mgr.offlineCached', { time: cachedAt() }) }}</p>
           }
           @case ('EMPTY_OFFLINE') {
-            <p class="mt-5 flex items-center gap-2 border-2 border-hold bg-hold-pale px-4 py-3 font-semibold text-hold-ink" role="alert">
-              <aon-icon name="cloud-off" [size]="20" />{{ i18n.t('mgr.offlineNoCache') }}
-            </p>
+            <p class="banner banner-bad" role="alert"><aon-icon name="cloud-off" [size]="18" />{{ i18n.t('mgr.offlineNoCache') }}</p>
           }
           @case ('ERROR') {
-            <div class="mt-5 flex flex-wrap items-center gap-3 border-2 border-hold bg-hold-pale px-4 py-3 font-semibold text-hold-ink" role="alert">
-              <aon-icon name="alert" [size]="20" />{{ i18n.t('mgr.loadFailed') }}
-              <button type="button" class="min-h-11 bg-charcoal px-4 font-cond text-white" (click)="store.load()">{{ i18n.t('common.retry') }}</button>
+            <div class="banner banner-bad" role="alert">
+              <aon-icon name="alert" [size]="18" />{{ i18n.t('mgr.loadFailed') }}
+              <button type="button" class="banner-btn" (click)="store.load()">{{ i18n.t('common.retry') }}</button>
             </div>
           }
         }
 
-        @if (data(); as d) {
-          <!-- KPI cells -->
-          <dl class="mt-6 grid grid-cols-2 border-2 border-charcoal bg-stock md:grid-cols-5">
-            <div class="kpi border-b-2 border-r-2 border-charcoal md:border-b-0">
-              <dt class="label-caps text-ink-muted">{{ i18n.t('mgr.kpiWorking') }}</dt>
-              <dd class="kpi-n">{{ kpi().working }}<span class="text-2xl text-ink-muted"> / {{ d.workers.length }}</span></dd>
-              <dd class="text-sm text-ink-muted">{{ i18n.t('mgr.kpiWorkingSub', { n: kpi().notStarted }) }}</dd>
-            </div>
-            <div class="kpi border-b-2 border-charcoal md:border-b-0 md:border-r-2">
-              <dt class="label-caps text-ink-muted">{{ i18n.t('mgr.kpiHours') }}</dt>
-              <dd class="kpi-n">{{ i18n.number(kpi().hours) }}<span class="text-2xl text-ink-muted"> h</span></dd>
-              <dd class="text-sm text-ink-muted">{{ i18n.t('mgr.kpiHoursSub') }}</dd>
-            </div>
-            <div class="kpi border-b-2 border-r-2 border-charcoal md:border-b-0">
-              <dt class="label-caps text-ink-muted">{{ i18n.t('mgr.kpiProgress') }}</dt>
-              <dd class="kpi-n">{{ kpi().inProgress }}</dd>
-              <dd class="text-sm text-ink-muted">{{ i18n.t('mgr.kpiProgressSub') }}</dd>
-            </div>
-            <div class="kpi border-b-2 border-charcoal md:border-b-0 md:border-r-2" [class]="kpi().issues > 0 ? 'bg-hold text-white' : ''">
-              <dt class="flex items-center gap-1.5 label-caps" [class.text-ink-muted]="kpi().issues === 0">
-                @if (kpi().issues > 0) {
-                  <aon-icon name="alert" [size]="14" [stroke]="3" />
-                }
-                {{ i18n.t('mgr.kpiIssues') }}
-              </dt>
-              <dd class="kpi-n">{{ kpi().issues }}</dd>
-              <dd class="text-sm" [class]="kpi().issues > 0 ? 'text-white/85' : 'text-ink-muted'">{{ i18n.t('mgr.kpiIssuesSub') }}</dd>
-            </div>
-            <div class="col-span-2 md:col-span-1">
-              <button
-                type="button"
-                class="kpi block h-full w-full text-left"
-                [class]="store.toReview().length ? 'bg-charcoal text-white hover:bg-charcoal-deep' : 'cursor-default'"
-                [disabled]="!store.toReview().length"
-                [attr.aria-label]="i18n.t('mgr.kpiReviewAria', { n: store.toReview().length })"
-                (click)="openNextReport()"
-              >
-                <span class="flex items-center justify-between gap-1.5 label-caps" [class]="store.toReview().length ? 'text-on-dark-muted' : 'text-ink-muted'">
-                  {{ i18n.t('mgr.kpiReview') }}
-                  @if (store.toReview().length) {
-                    <aon-icon name="chevron-right" [size]="18" [stroke]="3" />
-                  }
-                </span>
-                <span class="kpi-n block">{{ store.toReview().length }}</span>
-                <span class="block text-sm" [class]="store.toReview().length ? 'text-on-dark-muted' : 'text-ink-muted'">{{ i18n.t('mgr.kpiReviewSub', { n: store.toReview().length }) }}</span>
-              </button>
-            </div>
-          </dl>
-
-          <!-- Filters -->
-          <div class="mt-6 flex flex-wrap items-center gap-2">
-            <div class="flex flex-wrap gap-2" role="group" [attr.aria-label]="i18n.t('mgr.filterSites')">
-              <button type="button" class="chip" [class.on]="site() === null" [attr.aria-pressed]="site() === null" (click)="site.set(null)">
-                {{ i18n.t('mgr.allSites') }}
-              </button>
-              @for (s of d.sites; track s.id) {
-                <button type="button" class="chip" [class.on]="site() === s.id" [attr.aria-pressed]="site() === s.id" [title]="s.projectName + ' · ' + s.name" (click)="site.set(s.id)">
-                  <span class="font-cond text-base">{{ s.code }}</span> {{ chipLabel(s) }}
-                </button>
-              }
-            </div>
-            <button
-              type="button"
-              class="chip"
-              [class.on-hold]="onlyIssues()"
-              [attr.aria-pressed]="onlyIssues()"
-              (click)="onlyIssues.set(!onlyIssues())"
-            >
-              <aon-icon name="alert" [size]="16" [stroke]="2.75" />{{ i18n.t('mgr.onlyIssues') }}
-            </button>
+        @if (mode() === 'orders') {
+          <div class="flt filters" role="group" [attr.aria-label]="i18n.t('mgr.tabsLabel')">
+            @for (t of tabs; track t.id) {
+              <button type="button" class="flt-btn" [attr.aria-pressed]="status() === t.id" (click)="status.set(t.id)">{{ i18n.t(t.label) }}<span class="flt-n">{{ counts()[t.id] }}</span></button>
+            }
           </div>
 
-          <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
-            <label class="relative block w-full sm:w-80">
-              <span class="sr-only">{{ i18n.t('mgr.search') }}</span>
-              <aon-icon name="search" [size]="18" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
-              <input
-                type="search"
-                class="block min-h-12 w-full border-2 border-charcoal bg-stock pl-10 pr-3 font-semibold outline-none placeholder:font-normal placeholder:text-ink-muted focus:ring-4 focus:ring-gold"
-                [placeholder]="i18n.t('mgr.search')"
-                [value]="query()"
-                (input)="query.set($any($event.target).value)"
-              />
-            </label>
-            <div class="inline-flex border-2 border-charcoal" role="group" [attr.aria-label]="i18n.t('mgr.view')">
-              @for (v of views; track v.id) {
-                <button
-                  type="button"
-                  class="flex min-h-11 items-center gap-2 px-4 font-cond text-lg"
-                  [class]="view() === v.id ? 'bg-charcoal text-white' : 'bg-stock text-ink hover:bg-ground-deep'"
-                  [attr.aria-pressed]="view() === v.id"
-                  (click)="view.set(v.id)"
-                >
-                  <aon-icon [name]="v.icon" [size]="18" />{{ i18n.t(v.label) }}
-                </button>
-              }
-            </div>
-          </div>
-
-          @if (view() === 'orders') {
-            <!-- Orders table -->
-            <div class="mt-3 overflow-x-auto border-2 border-charcoal bg-stock">
-              <table class="w-full min-w-[60rem] border-collapse text-left">
-                <thead class="bg-charcoal text-white">
+          @if (data()) {
+            <div class="card">
+              <table class="tbl">
+                <thead>
                   <tr>
-                    @for (col of orderCols; track col.key) {
-                      <th scope="col" class="px-2.5 py-0 font-normal" [class.text-right]="col.num" [attr.aria-sort]="ariaSort(col.key)">
-                        <button
-                          type="button"
-                          class="flex min-h-11 w-full items-center gap-1 label-caps"
-                          [class.justify-end]="col.num"
-                          [attr.aria-label]="i18n.t('mgr.sortBy', { col: i18n.t(col.label) })"
-                          (click)="sortBy(col.key)"
-                        >
+                    @for (col of cols; track col.key) {
+                      <th scope="col" [attr.aria-sort]="ariaSort(col.key)" [class]="'c-' + col.key">
+                        <button type="button" class="th" (click)="sortBy(col.key)">
                           {{ i18n.t(col.label) }}
-                          <span class="inline-flex w-4 text-gold">
-                            @if (sort().key === col.key) {
-                              <aon-icon [name]="sort().dir === 1 ? 'chevron-up' : 'chevron-down'" [size]="16" [stroke]="3" />
-                            }
-                          </span>
+                          @if (sort().key === col.key) {
+                            <aon-icon [name]="sort().dir === 1 ? 'chevron-up' : 'chevron-down'" [size]="14" [stroke]="2.2" />
+                          }
                         </button>
                       </th>
                     }
-                    <th scope="col" class="px-2.5 text-right label-caps">{{ i18n.t('mgr.colPhotos') }}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  @for (row of orderRows(); track row.order.id) {
+                  @for (row of pageRows(); track row.order.id) {
                     @let isOpen = panel()?.kind === 'order' && panel()?.id === row.order.id;
-                    <tr
-                      class="cursor-pointer border-b border-rule-soft last:border-b-0"
-                      [class]="isOpen ? 'bg-gold-pale' : 'hover:bg-ground'"
-                      [attr.aria-selected]="isOpen"
-                      (click)="openRow(row)"
-                    >
-                      <td class="px-2.5 py-2.5">
-                        @if (row.pending) {
-                          <span class="inline-flex items-center gap-1.5 border-2 border-dashed border-charcoal px-2 py-1 label-caps leading-none"><aon-icon name="refresh" [size]="13" [stroke]="3" />{{ i18n.t('mgr.pendingSync') }}</span>
-                        } @else if (!row.order.published) {
-                          <span class="inline-flex items-center gap-1.5 border-2 border-dashed border-charcoal px-2 py-1 label-caps leading-none"><aon-icon name="note" [size]="13" [stroke]="3" />{{ i18n.t('mgr.draft') }}</span>
-                        } @else {
-                          <aon-status-tag [status]="row.order.status" size="sm" />
-                        }
-                      </td>
-                      <td class="px-2.5 py-2.5">
+                    <tr class="row" [class.is-open]="isOpen" [attr.aria-selected]="isOpen" (click)="openRow(row)">
+                      <td class="c-code">
                         <button
                           type="button"
-                          class="whitespace-nowrap font-cond-tight text-xl leading-none underline decoration-transparent underline-offset-4 hover:decoration-current"
-                          [class.text-ink-muted]="!row.order.code"
+                          class="code"
                           [attr.aria-label]="i18n.t('orders.open', { code: row.order.code ?? row.order.title })"
                           [attr.aria-expanded]="isOpen"
                           (click)="$event.stopPropagation(); openRow(row)"
-                        >
-                          {{ row.order.code ?? i18n.t('form.numberPending') }}
-                        </button>
+                        >{{ row.order.code ?? i18n.t('form.numberPending') }}</button>
                       </td>
-                      <td class="max-w-[13rem] px-2.5 py-2.5">
-                        <span class="block truncate font-semibold">{{ row.order.title }}</span>
-                        <span class="block truncate text-sm text-ink-muted">{{ row.order.location }}</span>
-                      </td>
-                      <td class="whitespace-nowrap px-2.5 py-2.5" [class.text-ink-muted]="!row.crewNames.length" [title]="row.crewNames.join(', ')">
-                        @if (row.crewNames.length > 1) {
-                          <span class="inline-flex items-center gap-1.5"><aon-icon name="users" [size]="15" class="text-ink-muted" />{{ crew(row.crewNames) }}</span>
-                        } @else {
-                          {{ crew(row.crewNames) }}
-                        }
-                      </td>
-                      <td class="whitespace-nowrap px-2.5 py-2.5 text-[0.95rem]" [title]="siteLabel(row.order.siteId)">{{ siteById().get(row.order.siteId)?.projectName ?? row.order.siteName }}</td>
-                      <td class="px-2.5 py-2.5 text-right font-cond text-lg">{{ duration(row.minutesToday) }}</td>
-                      <td class="px-2.5 py-2.5 text-right font-cond text-lg">{{ duration(row.minutesTotal) }}</td>
-                      <td class="px-2.5 py-2.5">
-                        <span class="flex items-center justify-end gap-2 whitespace-nowrap">
-                          <span class="font-cond text-lg">{{ i18n.number(row.order.doneQty) }}/{{ i18n.number(row.order.plannedQty) }} {{ i18n.t(unitKey(row.order.unit)) }}</span>
-                          <span class="h-2.5 w-12 shrink-0 border border-charcoal bg-ground" aria-hidden="true">
-                            <span class="block h-full" [class]="row.order.status === 'COMPLETED' ? 'bg-done' : 'bg-charcoal'" [style.width.%]="progress(row) * 100"></span>
+                      <td class="c-title"><span class="clamp">{{ row.order.title }}</span></td>
+                      <td class="c-worker">
+                        @if (row.crewNames.length) {
+                          <span class="who">
+                            <span class="ava" [attr.data-tone]="tone(row.crewNames[0])" aria-hidden="true">{{ initials(row.crewNames[0]) }}</span>
+                            <span class="clamp">{{ crew(row.crewNames) }}</span>
                           </span>
-                        </span>
+                        } @else {
+                          <span class="muted">{{ i18n.t('mgr.unassigned') }}</span>
+                        }
                       </td>
-                      <td class="px-2.5 py-2.5 text-right font-cond text-lg">{{ row.photoCount }}</td>
+                      <td class="c-status">
+                        @if (row.pending) {
+                          <span class="badge badge-wait">{{ i18n.t('mgr.pendingShort') }}</span>
+                        } @else if (!row.order.published) {
+                          <span class="badge badge-wait">{{ i18n.t('mgr.draftShort') }}</span>
+                        } @else {
+                          <span class="badge" [attr.data-s]="row.order.status">{{ i18n.t(statusKey(row.order.status)) }}</span>
+                        }
+                      </td>
+                      <td class="c-progress">
+                        @if (row.order.status === 'ISSUE') {
+                          <span class="muted" [title]="i18n.number(row.order.doneQty) + '/' + i18n.number(row.order.plannedQty)">—</span>
+                        } @else {
+                          <span class="prog">
+                            <span>{{ i18n.number(row.order.doneQty) }}/{{ i18n.number(row.order.plannedQty) }} {{ i18n.t(unitKey(row.order.unit)) }}</span>
+                            <span class="prog-bar" aria-hidden="true"><span [style.width.%]="progress(row) * 100"></span></span>
+                          </span>
+                        }
+                      </td>
                     </tr>
                   } @empty {
                     <tr>
-                      <td colspan="9" class="px-4 py-10 text-center">
-                        <p class="font-cond text-xl">{{ i18n.t('mgr.noResults') }}</p>
-                        <button type="button" class="mt-3 min-h-11 bg-charcoal px-4 font-cond text-lg text-white" (click)="clearFilters()">{{ i18n.t('mgr.clearFilters') }}</button>
+                      <td colspan="5" class="empty">
+                        <p>{{ i18n.t('mgr.noResults') }}</p>
+                        <button type="button" class="empty-btn" (click)="clearFilters()">{{ i18n.t('mgr.clearFilters') }}</button>
                       </td>
                     </tr>
                   }
                 </tbody>
               </table>
             </div>
-          } @else {
-            <!-- Workers table -->
-            <div class="mt-3 overflow-x-auto border-2 border-charcoal bg-stock">
-              <table class="w-full min-w-[52rem] border-collapse text-left">
-                <thead class="bg-charcoal text-white">
-                  <tr>
-                    @for (h of workerCols; track h) {
-                      <th scope="col" class="px-3 py-3 label-caps">{{ i18n.t(h) }}</th>
-                    }
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (w of workerRows(); track w.user.id) {
-                    @let p = PRESENCE_STYLE[w.presence];
-                    <tr class="border-b border-rule-soft last:border-b-0">
-                      <td class="px-2.5 py-2.5">
-                        <span class="tag-sm tag-shape-sm inline-flex min-h-7 items-center gap-1.5 whitespace-nowrap py-1 pr-2.5 label-caps leading-none" [class]="p.cls">
-                          <span class="tag-eyelet"></span><aon-icon [name]="p.icon" [size]="14" [stroke]="3" />{{ i18n.t(presenceKey(w.presence)) }}
-                        </span>
-                      </td>
-                      <td class="px-2.5 py-2.5">
-                        <span class="block font-semibold">{{ w.user.displayName }}</span>
-                        <span class="block text-sm text-ink-muted">{{ w.user.crew }}</span>
-                      </td>
-                      <!-- Report status sits beside the name so it stays visible when the review panel narrows the table. -->
-                      <td class="px-2.5 py-2.5">
-                        @if (w.summaryId && w.summaryStatus) {
-                          <button type="button" class="flex items-center gap-1" [attr.aria-label]="i18n.t('mgr.openReport', { name: w.user.displayName })" (click)="openReport(w.summaryId)">
-                            <aon-report-status [status]="statusOf(w.summaryStatus)" /><aon-icon name="chevron-right" [size]="18" />
-                          </button>
-                        } @else {
-                          <span class="text-ink-muted">{{ i18n.t('common.none') }}</span>
-                        }
-                      </td>
-                      <td class="px-2.5 py-2.5 text-[0.95rem]">{{ w.site ? w.site.projectName + ' · ' + w.site.name : i18n.t('common.none') }}</td>
-                      <td class="px-2.5 py-2.5">
-                        @if (w.activeOrderCode; as code) {
-                          <button type="button" class="whitespace-nowrap font-cond-tight text-xl underline underline-offset-4" (click)="selectByCode(code)">{{ code }}</button>
-                        } @else {
-                          <span class="text-ink-muted">{{ i18n.t('mgr.noActiveOrder') }}</span>
-                        }
-                      </td>
-                      <td class="px-2.5 py-2.5 font-cond text-lg">{{ w.shiftStartedAt ? i18n.time(w.shiftStartedAt) : i18n.t('common.none') }}</td>
-                      <td class="px-2.5 py-2.5 font-cond text-lg">{{ duration(w.minutesToday) }}</td>
-                    </tr>
-                  } @empty {
-                    <tr>
-                      <td colspan="7" class="px-4 py-10 text-center">
-                        <p class="font-cond text-xl">{{ i18n.t('mgr.noWorkers') }}</p>
-                        <button type="button" class="mt-3 min-h-11 bg-charcoal px-4 font-cond text-lg text-white" (click)="clearFilters()">{{ i18n.t('mgr.clearFilters') }}</button>
-                      </td>
-                    </tr>
+            @if (pageCount() > 1) {
+              <nav class="pager" [attr.aria-label]="i18n.t('mgr.pagerLabel')">
+                <p class="pager-info">{{ i18n.t('mgr.pageOf', { from: pageFrom(), to: pageTo(), n: orderRows().length }) }}</p>
+                <div class="pager-btns">
+                  <button type="button" class="pg" [disabled]="page() === 0" [attr.aria-label]="i18n.t('mgr.prevPage')" (click)="page.set(page() - 1)"><aon-icon name="chevron-left" [size]="18" /></button>
+                  @for (n of pages(); track n) {
+                    <button type="button" class="pg" [class.is-on]="page() === n" [attr.aria-current]="page() === n ? 'page' : null" [attr.aria-label]="i18n.t('mgr.pageN', { n: n + 1 })" (click)="page.set(n)">{{ n + 1 }}</button>
                   }
-                </tbody>
-              </table>
-            </div>
+                  <button type="button" class="pg" [disabled]="page() >= pageCount() - 1" [attr.aria-label]="i18n.t('mgr.nextPage')" (click)="page.set(page() + 1)"><aon-icon name="chevron-right" [size]="18" /></button>
+                </div>
+              </nav>
+            }
           }
-        } @else if (store.state() === 'LOADING') {
-          <div class="mt-6 grid gap-3" aria-busy="true">
-            <div class="h-28 animate-pulse bg-ground-deep"></div>
-            <div class="h-12 w-1/2 animate-pulse bg-ground-deep"></div>
-            <div class="h-80 animate-pulse bg-ground-deep"></div>
+        } @else if (mode() === 'reviews' && data()) {
+          <div class="card">
+            <table class="tbl tbl-team">
+              <thead>
+                <tr>
+                  <th scope="col"><span class="th">{{ i18n.t('mgr.colWorker') }}</span></th>
+                  <th scope="col"><span class="th">{{ i18n.t('mgr.colDay') }}</span></th>
+                  <th scope="col"><span class="th">{{ i18n.t('mgr.colHours') }}</span></th>
+                  <th scope="col"><span class="th">{{ i18n.t('mgr.colOrdersWorked') }}</span></th>
+                  <th scope="col"><span class="th">{{ i18n.t('mgr.colState') }}</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (r of reportRows(); track r.id) {
+                  @let isOpen = panel()?.kind === 'report' && panel()?.id === r.id;
+                  <tr class="row" [class.is-open]="isOpen" [attr.aria-selected]="isOpen" (click)="openReport(r.id)">
+                    <td>
+                      <span class="who">
+                        <span class="ava" [attr.data-tone]="tone(r.name)" aria-hidden="true">{{ initials(r.name) }}</span>
+                        <button type="button" class="code" (click)="$event.stopPropagation(); openReport(r.id)">{{ r.name }}</button>
+                      </span>
+                    </td>
+                    <td class="tabular-nums" [attr.data-label]="i18n.t('mgr.colDay')">{{ r.arrival }}–{{ r.departure }}</td>
+                    <td class="tabular-nums" [attr.data-label]="i18n.t('mgr.colHours')">{{ r.hours }}</td>
+                    <td class="codes" [attr.data-label]="i18n.t('mgr.colOrdersWorked')">{{ r.orders }}</td>
+                    <td [attr.data-label]="i18n.t('mgr.colState')"><aon-report-status [status]="r.status" /></td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="5" class="empty"><p>{{ i18n.t('mgr.reviewsEmpty') }}</p></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else if (data()) {
+          <div class="card">
+            <table class="tbl tbl-team">
+              <thead>
+                <tr>
+                  @for (h of workerCols; track h) {
+                    <th scope="col"><span class="th">{{ i18n.t(h) }}</span></th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (w of workerRows(); track w.user.id) {
+                  <tr class="row is-static">
+                    <td>
+                      <span class="who">
+                        <span class="ava" [attr.data-tone]="tone(w.user.displayName)" aria-hidden="true">{{ initials(w.user.displayName) }}</span>
+                        <span><span class="block">{{ w.user.displayName }}</span><span class="block text-sm muted">{{ w.user.crew }}</span></span>
+                      </span>
+                    </td>
+                    <td><span class="badge" [attr.data-p]="w.presence">{{ i18n.t(presenceKey(w.presence)) }}</span></td>
+                    <td [attr.data-label]="i18n.t('mgr.colSite')"><span>@if (w.site) {<span class="whitespace-nowrap">{{ w.site.projectName }}&nbsp;·</span>{{ ' ' }}<span class="whitespace-nowrap">{{ w.site.name }}</span>} @else {{{ i18n.t('common.none') }}}</span></td>
+                    <td [attr.data-label]="i18n.t('mgr.colActive')">
+                      @if (w.activeOrderCode; as code) {
+                        <button type="button" class="code" (click)="selectByCode(code)">{{ code }}</button>
+                      } @else {
+                        <span class="muted">{{ i18n.t('mgr.noActiveOrder') }}</span>
+                      }
+                    </td>
+                    <td class="tabular-nums" [attr.data-label]="i18n.t('mgr.colSince')">{{ w.shiftStartedAt ? i18n.time(w.shiftStartedAt) : i18n.t('common.none') }}</td>
+                    <td class="tabular-nums" [attr.data-label]="i18n.t('mgr.colEnd')">
+                      @if (w.presence === 'WORKING') {
+                        <span class="muted">{{ i18n.t('day.stillWorking') }}</span>
+                      } @else {
+                        {{ w.shiftEndedAt ? i18n.time(w.shiftEndedAt) : i18n.t('common.none') }}
+                      }
+                    </td>
+                    <td class="tabular-nums" [attr.data-label]="i18n.t('mgr.colHours')">{{ w.minutesToday > 0 ? formatDuration(w.minutesToday) : i18n.t('common.none') }}</td>
+                    <td [attr.data-label]="i18n.t('mgr.colSummary')">
+                      @if (w.summaryId && w.summaryStatus) {
+                        <button type="button" class="inline-flex items-center gap-1" [attr.aria-label]="i18n.t('mgr.openReport', { name: w.user.displayName })" (click)="openReport(w.summaryId)">
+                          <aon-report-status [status]="statusOf(w.summaryStatus)" /><aon-icon name="chevron-right" [size]="16" />
+                        </button>
+                      } @else {
+                        <span class="muted">{{ i18n.t('common.none') }}</span>
+                      }
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="8" class="empty">
+                      <p>{{ i18n.t('mgr.noWorkers') }}</p>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+
+        @if (!data() && store.state() === 'LOADING') {
+          <div class="card skeleton" aria-busy="true">
+            @for (i of [1, 2, 3, 4]; track i) {
+              <div class="skel-row"></div>
+            }
             <span class="sr-only">{{ i18n.t('common.loading') }}</span>
           </div>
         }
       </div>
 
+      @if (panel() && !docked()) {
+        <div class="scrim" aria-hidden="true" (click)="closePanel()"></div>
+      }
       @if (panel(); as p) {
-        <aside
-          class="drill fixed inset-y-0 right-0 z-50 w-[min(27rem,100vw)] overflow-y-auto border-l-2 border-charcoal bg-ground shadow-[0_0_48px_-12px_rgb(0_0_0/0.45)] xl:sticky xl:top-0 xl:z-auto xl:h-dvh xl:w-auto xl:shadow-none"
-          role="region"
-          aria-labelledby="drill-title"
-        >
+        <aside class="inspector" role="region" aria-labelledby="drill-title">
           @if (p.kind === 'order') {
-            <aon-order-drill [orderId]="p.id" [code]="selectedCode()" (closed)="panel.set(null)" (openReport)="openReport($event)" />
+            @for (id of [p.id]; track id) {
+              <aon-order-drill class="swap" [orderId]="id" [code]="selectedCode()" (closed)="closePanel()" (openReport)="openReport($event)" />
+            }
           } @else {
-            <aon-report-review [summaryId]="p.id" (closed)="panel.set(null)" />
+            <aon-report-review [summaryId]="p.id" (closed)="closePanel()" />
           }
         </aside>
       }
     </div>
   `,
   styles: `
-    .kpi {
-      padding: 1rem 1.25rem 1.1rem;
+    :host {
+      display: block;
+      --insp-w: 20.7rem;
     }
-    .kpi-n {
-      margin-top: 0.25rem;
-      font-stretch: 62%;
-      font-weight: 850;
-      font-size: 3.25rem;
-      line-height: 0.95;
+    .page {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      min-height: 100dvh;
     }
-    .chip {
+    .work {
+      min-width: 0;
+      padding: 0.8rem 2.5rem 2rem;
+    }
+    @media (min-width: 1360px) {
+      .page.has-inspector {
+        grid-template-columns: minmax(0, 1fr) var(--insp-w);
+      }
+      .page.has-inspector .work {
+        padding-right: 0;
+      }
+    }
+    .topline {
+      display: flex;
+      align-items: center;
+    }
+    .day {
+      position: relative;
       display: inline-flex;
       align-items: center;
-      gap: 0.4rem;
-      min-height: 2.75rem;
+      gap: 0.75rem;
+      letter-spacing: -0.01em;
+      height: 2.6rem;
       padding: 0 0.9rem;
-      border: 2px solid var(--color-charcoal);
-      background: var(--color-stock);
-      font-weight: 700;
-      transition: background-color 150ms var(--ease-out-expo);
+      border: 1px solid var(--color-line);
+      border-radius: 0.5rem;
+      background: var(--color-panel);
+      font-size: 1.13rem;
+      box-shadow: 0 1px 2px rgb(20 20 20 / 0.04);
     }
-    .chip:hover {
-      background: var(--color-ground-deep);
+    .day:focus-within {
+      border-color: var(--color-gold);
     }
-    .chip.on {
-      background: var(--color-charcoal);
+    .day input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .titleline {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-top: 1.85rem;
+    }
+    .title {
+      font-size: 2.09rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+    }
+    .title-scope {
+      color: var(--color-text-muted);
+      font-weight: 500;
+    }
+    .new {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      height: 2.5rem;
+      margin-right: 0.25rem;
+      padding: 0 1rem;
+      border-radius: 0.5rem;
+      background: var(--color-gold);
+      color: var(--color-charcoal);
+      font-weight: 600;
+      text-decoration: none;
+      box-shadow: 0 1px 2px rgb(20 20 20 / 0.12), inset 0 -2px 0 rgb(0 0 0 / 0.08);
+      transition: filter 160ms var(--ease-out-expo), transform 120ms var(--ease-out-expo);
+    }
+    .new:hover {
+      filter: brightness(1.04);
+    }
+    .new:active {
+      transform: translateY(1px);
+      box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.15);
+    }
+    .search {
+      position: relative;
+      display: flex;
+      align-items: center;
+      height: 2.6rem;
+      margin-top: 1.5rem;
+      border: 1px solid var(--color-line);
+      border-radius: 0.5rem;
+      background: var(--color-panel);
+      box-shadow: 0 1px 2px rgb(20 20 20 / 0.04);
+    }
+    .search:focus-within {
+      border-color: var(--color-gold);
+      box-shadow: 0 0 0 3px rgb(193 160 80 / 0.18);
+    }
+    .search-icon {
+      margin-left: 0.85rem;
+      color: var(--color-text-muted);
+    }
+    /* The shortcut hint only means something with a keyboard. */
+    .kbd {
+      display: none;
+      margin-left: 0.7rem;
+      color: var(--color-text-muted);
+      font-family: var(--font-ui);
+      font-size: 1.05rem;
+    }
+    @media (hover: hover) and (pointer: fine) and (min-width: 901px) {
+      .kbd {
+        display: inline;
+      }
+    }
+    .search input {
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 100%;
+      padding: 0 0.75rem 0 0.6rem;
+      background: transparent;
+      font-size: 1.13rem;
+      outline: none;
+    }
+    .search input::placeholder {
+      color: var(--color-text-muted);
+    }
+    .banner {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.9rem;
+      padding: 0.65rem 0.9rem;
+      border-radius: 0.5rem;
+      background: var(--color-gold-fill);
+      color: var(--color-gold-ink);
+    }
+    .banner-bad {
+      background: var(--color-bad-tint);
+      color: var(--color-bad-ink);
+    }
+    .banner-btn {
+      margin-left: auto;
+      min-height: 2.25rem;
+      padding: 0 0.85rem;
+      border-radius: 0.45rem;
+      background: var(--color-text);
+      color: #fff;
+      font-weight: 500;
+    }
+    .filters {
+      margin-top: 1.6rem;
+    }
+    .card {
+      margin-top: 1.6rem;
+      border: 1px solid var(--color-line);
+      border-radius: 0.6rem;
+      background: var(--color-panel);
+      box-shadow: 0 1px 2px rgb(20 20 20 / 0.04), 0 8px 24px -18px rgb(20 20 20 / 0.25);
+      overflow: auto;
+    }
+    @media (min-width: 1360px) {
+      .page.has-inspector .card {
+        border-right: 0;
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+      }
+    }
+    .tbl {
+      width: 100%;
+      min-width: 38rem;
+      table-layout: fixed;
+      border-collapse: collapse;
+      font-size: 1.04rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .tbl-team {
+      table-layout: auto;
+      min-width: 0;
+    }
+    /* A narrow office screen scrolls the team table inside its card rather than hiding the last columns. */
+    .card:has(> .tbl-team) {
+      overflow-x: auto;
+    }
+    .tbl-team td {
+      white-space: nowrap;
+    }
+    /* The object name may wrap so the report-state pill keeps its room. */
+    .tbl-team td:nth-child(3) {
+      white-space: normal;
+      min-width: 9rem;
+    }
+    .tbl-team td:last-child {
+      min-width: 11rem;
+    }
+    .codes {
+      font-variant-numeric: normal;
+      font-feature-settings: normal;
+      letter-spacing: -0.01em;
+    }
+    .tbl thead tr {
+      background: var(--color-row-tint);
+    }
+    .tbl thead th {
+      padding: 0;
+      background: var(--color-row-tint);
+      border-bottom: 1px solid var(--color-line);
+      text-align: left;
+    }
+    .th {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      height: 2.6rem;
+      padding: 0 1rem;
+      color: var(--color-text-muted);
+      font-weight: 400;
+      white-space: nowrap;
+    }
+    button.th:hover {
+      color: var(--color-text);
+    }
+    .c-code {
+      /* The code never wraps into the title on a narrower office screen. */
+      width: max(14.5%, 8.75rem);
+      padding-right: 1.5rem !important;
+    }
+    .c-title {
+      width: 27%;
+    }
+    .c-worker {
+      width: 25%;
+      white-space: nowrap;
+    }
+    .c-worker .clamp {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .c-status {
+      width: 14.5%;
+    }
+    .row td {
+      height: 4.35rem;
+      padding: 0.4rem 1rem;
+      border-bottom: 1px solid var(--color-line);
+      vertical-align: middle;
+    }
+    .row:last-child td {
+      border-bottom: 0;
+    }
+    .row {
+      cursor: pointer;
+      transition: background-color 180ms var(--ease-out-expo), box-shadow 180ms var(--ease-out-expo);
+    }
+    .row.is-static {
+      cursor: default;
+    }
+    .row:not(.is-open):not(.is-static):hover {
+      background: var(--color-row-tint);
+    }
+    .row.is-open {
+      background: var(--color-gold-fill);
+      box-shadow: inset 0 0 0 2px var(--color-gold);
+    }
+    .row:focus-within:not(.is-static) {
+      box-shadow: inset 0 0 0 2px var(--color-charcoal);
+    }
+    .row .code:focus-visible {
+      outline: none;
+      box-shadow: none;
+    }
+    .pg:focus-visible {
+      position: relative;
+      z-index: 1;
+      outline: 2px solid var(--color-charcoal);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 5px rgb(193 160 80 / 0.45);
+    }
+    .code {
+      white-space: nowrap;
+      font-variant-numeric: normal;
+      font-feature-settings: normal;
+      letter-spacing: -0.01em;
+      text-decoration: underline;
+      text-decoration-color: transparent;
+      text-underline-offset: 0.2em;
+    }
+    .code:hover {
+      text-decoration-color: currentColor;
+    }
+    .clamp {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      line-height: 1.25;
+    }
+    .muted {
+      color: var(--color-text-muted);
+    }
+    .who {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .ava {
+      display: grid;
+      place-items: center;
+      width: 2rem;
+      height: 2rem;
+      flex: 0 0 auto;
+      border-radius: 9999px;
+      background: #5d6f93;
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+    .ava[data-tone='1'] {
+      background: #b9984a;
+    }
+    .ava[data-tone='2'] {
+      background: #a85a55;
+    }
+    .ava[data-tone='3'] {
+      background: #4f7a72;
+    }
+    .ava[data-tone='4'] {
+      background: #7b6a94;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      height: 1.85rem;
+      padding: 0 0.6rem;
+      border-radius: 9999px;
+      background: var(--color-field);
+      color: var(--color-text);
+      font-size: 1.05rem;
+      white-space: nowrap;
+    }
+    .badge[data-s='NEW'],
+    .badge[data-p='NOT_STARTED'] {
+      background: var(--color-new-tint);
+      color: var(--color-new-ink);
+    }
+    .badge[data-s='IN_PROGRESS'],
+    .badge[data-p='WORKING'] {
+      background: var(--color-blue-tint);
+      color: var(--color-blue);
+    }
+    .badge[data-s='COMPLETED'],
+    .badge[data-p='FINISHED'] {
+      background: var(--color-ok-tint);
+      color: var(--color-ok-ink);
+    }
+    .badge[data-s='ISSUE'] {
+      background: var(--color-bad-tint);
+      color: var(--color-bad);
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    .badge-wait {
+      background: transparent;
+      box-shadow: inset 0 0 0 1px var(--color-line-strong);
+      color: var(--color-text-muted);
+    }
+    .prog {
+      display: inline-grid;
+      gap: 0.35rem;
+    }
+    .prog-bar {
+      display: block;
+      width: 6rem;
+      height: 0.36rem;
+      border-radius: 9999px;
+      background: var(--color-track);
+      overflow: hidden;
+    }
+    .prog-bar span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--color-progress);
+    }
+    .pager {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-top: 1rem;
+      padding-right: 1rem;
+    }
+    .pager-info {
+      color: var(--color-text-muted);
+      font-size: 1rem;
+    }
+    .pager-btns {
+      display: flex;
+      gap: 0.35rem;
+    }
+    .pg {
+      display: grid;
+      place-items: center;
+      min-width: 2.4rem;
+      height: 2.4rem;
+      padding: 0 0.5rem;
+      border: 1px solid var(--color-line);
+      border-radius: 0.45rem;
+      background: var(--color-panel);
+      font-variant-numeric: tabular-nums;
+    }
+    .pg:hover:not(:disabled) {
+      border-color: var(--color-line-strong);
+    }
+    .pg:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .pg.is-on {
+      border-color: var(--color-text);
+      background: var(--color-text);
       color: #fff;
     }
-    .chip.on-hold {
-      background: var(--color-hold);
-      border-color: var(--color-hold);
-      color: #fff;
+    .empty {
+      padding: 2.5rem 1rem;
+      text-align: center;
+      color: var(--color-text-muted);
     }
-    .drill {
-      animation: drill-in 220ms var(--ease-out-expo) both;
+    .empty-btn {
+      margin-top: 0.75rem;
+      min-height: 2.5rem;
+      padding: 0 1rem;
+      border: 1px solid var(--color-line-strong);
+      border-radius: 0.5rem;
+      color: var(--color-text);
+      font-weight: 500;
     }
-    @keyframes drill-in {
+    .skeleton {
+      display: grid;
+      gap: 0.5rem;
+      padding: 1rem;
+    }
+    .skel-row {
+      height: 3rem;
+      border-radius: 0.4rem;
+      background: linear-gradient(90deg, var(--color-field), #faf9f6, var(--color-field));
+      background-size: 200% 100%;
+      animation: skel 1.4s linear infinite;
+    }
+    @keyframes skel {
+      to {
+        background-position: -200% 0;
+      }
+    }
+    .scrim {
+      position: fixed;
+      inset: 0;
+      z-index: 45;
+      background: rgb(42 41 41 / 0.4);
+      animation: scrim-in 200ms var(--ease-out-expo) both;
+    }
+    @keyframes scrim-in {
       from {
-        transform: translateX(1.5rem);
         opacity: 0;
+      }
+    }
+    @media (max-width: 600px) {
+      .inspector {
+        width: 100vw !important;
+      }
+    }
+    .inspector {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 50;
+      width: min(var(--insp-w), 100vw);
+      overflow-y: auto;
+      border-left: 1px solid var(--color-line);
+      background: var(--color-panel);
+      box-shadow: -18px 0 40px -24px rgb(20 20 20 / 0.3);
+      animation: insp-in 260ms var(--ease-out-expo) both;
+    }
+    @media (min-width: 1360px) {
+      .inspector {
+        position: sticky;
+        width: auto;
+        height: 100dvh;
+        z-index: 2;
+      }
+    }
+    /* Selecting another row swaps the inspector's content in place: a short lift, no slide of the whole panel. */
+    .swap {
+      animation: swap-in 220ms var(--ease-out-expo) both;
+    }
+    @keyframes swap-in {
+      from {
+        opacity: 0;
+        transform: translateY(0.4rem);
+      }
+    }
+    @keyframes insp-in {
+      from {
+        transform: translateX(1rem);
+        opacity: 0;
+      }
+    }
+    /* Phones: each order becomes a card, so nothing hides behind a sideways scroll. */
+    @media (max-width: 700px) {
+      .card:not(.skeleton) .tbl {
+        min-width: 0;
+        table-layout: auto;
+      }
+      .tbl thead {
+        display: none;
+      }
+      .tbl tbody,
+      .tbl tr {
+        display: block;
+      }
+      .row {
+        display: grid !important;
+        grid-template-columns: 1fr auto;
+        gap: 0.35rem 0.75rem;
+        padding: 0.85rem 0.9rem;
+        border-bottom: 1px solid var(--color-line);
+      }
+      .row td {
+        display: block;
+        width: auto !important;
+        height: auto;
+        padding: 0 !important;
+        border: 0;
+      }
+      .row .c-code {
+        font-weight: 600;
+      }
+      .row .c-status {
+        grid-column: 2;
+        grid-row: 1;
+        justify-self: end;
+      }
+      .row .c-title {
+        grid-column: 1 / -1;
+      }
+      /* Who and how far share the last line, so a phone shows twice as many orders per screen. */
+      .row .c-worker {
+        grid-column: 1;
+        min-width: 0;
+      }
+      .row .c-progress {
+        grid-column: 2;
+        justify-self: end;
+        align-self: center;
+        text-align: right;
+      }
+      .row .c-progress .prog-bar {
+        width: 4.5rem;
+        margin-left: auto;
+      }
+      .row.is-static td[data-label] > * {
+        text-align: right;
+      }
+      .row.is-static td {
+        grid-column: 1 / -1;
+      }
+      .row.is-static td[data-label] {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+      .row.is-static td[data-label]::before {
+        content: attr(data-label);
+        color: var(--color-text-muted);
+      }
+    }
+    @media (max-width: 900px) {
+      .work {
+        padding: 0.75rem 0.9rem 1.5rem;
+      }
+      .title {
+        font-size: 1.6rem;
       }
     }
   `,
@@ -429,63 +889,96 @@ export class OverviewComponent implements OnInit {
   protected readonly i18n = inject(I18nService);
   protected readonly store = inject(ManagerStore);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly searchEl = viewChild<ElementRef<HTMLInputElement>>('search');
 
-  protected readonly PRESENCE_STYLE = PRESENCE_STYLE;
-  protected readonly demo = DEMO_MODE;
+  protected readonly formatDuration = formatDuration;
   protected readonly today = toIsoDate();
 
-  protected readonly site = signal<string | null>(null);
-  protected readonly onlyIssues = signal(false);
-  protected readonly query = signal('');
-  protected readonly view = signal<View>('orders');
-  protected readonly sort = signal<{ key: SortKey; dir: 1 | -1 }>({ key: 'status', dir: 1 });
-  protected readonly panel = signal<Panel | null>(null);
+  /** `?order=` opens an order; `?view=workers` shows the team; `?review=next` the next report; `?project=` / `?site=` scope the list. */
+  readonly order = input<string | undefined>(undefined);
+  readonly view = input<'orders' | 'workers', string | undefined>('orders', { transform: (v) => (v === 'workers' ? 'workers' : 'orders') });
+  readonly review = input<string | undefined>(undefined);
+  readonly report = input<string | undefined>(undefined);
+  readonly project = input<string | undefined>(undefined);
+  readonly site = input<string | undefined>(undefined);
 
-  protected readonly views: ReadonlyArray<{ id: View; label: TranslationKey; icon: IconName }> = [
-    { id: 'orders', label: 'mgr.viewOrders', icon: 'list' },
-    { id: 'workers', label: 'mgr.viewWorkers', icon: 'users' },
+  protected readonly status = signal<StatusTab>('ALL');
+  protected readonly sort = signal<{ key: SortKey; dir: 1 | -1 }>({ key: 'code', dir: 1 });
+  protected readonly panel = signal<Panel | null>(null);
+  private readonly docked = signal(false);
+  /** The manager closed the inspector on purpose; do not reopen it on the next data refresh. */
+  private userClosed = false;
+
+  protected readonly tabs: ReadonlyArray<{ id: StatusTab; label: TranslationKey }> = [
+    { id: 'ALL', label: 'mgr.tabAll' },
+    { id: 'NEW', label: 'status.NEW' },
+    { id: 'IN_PROGRESS', label: 'status.IN_PROGRESS' },
+    { id: 'COMPLETED', label: 'status.COMPLETED' },
+    { id: 'ISSUE', label: 'status.ISSUE' },
   ];
-  protected readonly orderCols: ReadonlyArray<{ key: SortKey; label: TranslationKey; num: boolean }> = [
-    { key: 'status', label: 'mgr.colStatus', num: false },
-    { key: 'code', label: 'mgr.colCode', num: false },
-    { key: 'title', label: 'mgr.colTitle', num: false },
-    { key: 'worker', label: 'mgr.colCrew', num: false },
-    { key: 'site', label: 'mgr.colProject', num: false },
-    { key: 'today', label: 'mgr.colToday', num: true },
-    { key: 'total', label: 'mgr.colTotal', num: true },
-    { key: 'progress', label: 'mgr.colProgress', num: true },
+  protected readonly cols: ReadonlyArray<{ key: SortKey; label: TranslationKey }> = [
+    { key: 'code', label: 'mgr.colId' },
+    { key: 'title', label: 'mgr.colTitle' },
+    { key: 'worker', label: 'mgr.colOwner' },
+    { key: 'status', label: 'mgr.colStatus' },
+    { key: 'progress', label: 'mgr.colProgress' },
   ];
   protected readonly workerCols: readonly TranslationKey[] = [
-    'mgr.colPresence',
     'mgr.colWorker',
-    'mgr.colSummary',
+    'mgr.colPresence',
     'mgr.colSite',
     'mgr.colActive',
     'mgr.colSince',
+    'mgr.colEnd',
     'mgr.colHours',
+    'mgr.colSummary',
   ];
 
   protected readonly data = this.store.overview;
+
+  /** What the page lists: orders, the team, or the day's reports (`?review=`). */
+  protected readonly mode = computed<'orders' | 'workers' | 'reviews'>(() => (this.review() ? 'reviews' : this.view()));
+
+  /** The day's daily reports, the ones waiting for a decision first. */
+  protected readonly reportRows = computed(() => {
+    const d = this.data();
+    if (!d) return [];
+    const names = new Map(d.workers.map((w) => [w.user.id, w.user.displayName]));
+    const rank: Readonly<Record<DailySummaryStatus, number>> = { SUBMITTED: 0, RETURNED: 1, DRAFT: 2, APPROVED: 3 };
+    const words = this.words();
+    return [...d.summaries]
+      .map((s) => ({
+        id: s.id,
+        name: names.get(s.userId) ?? s.userId,
+        arrival: this.i18n.time(s.arrivalAt),
+        departure: this.i18n.time(s.departureAt),
+        hours: formatDuration(s.shiftMinutes),
+        orders: s.ordersWorked.join(', ') || this.i18n.t('common.none'),
+        status: s.status,
+      }))
+      .filter((r) => words.every((w) => `${r.name} ${r.orders}`.toLocaleLowerCase().includes(w)))
+      .sort((a, b) => rank[a.status] - rank[b.status] || a.name.localeCompare(b.name));
+  });
+
+  protected readonly dayLabel = computed(() =>
+    this.store.isToday() ? this.i18n.t('mgr.dayToday', { date: this.i18n.dateShort(this.store.date()) }) : this.i18n.date(this.store.date()),
+  );
 
   protected readonly cachedAt = computed(() => {
     const at = this.store.savedAt();
     return at ? `${this.i18n.date(at)} ${this.i18n.time(at)}` : '';
   });
 
-  protected readonly kpi = computed(() => {
-    const d = this.data();
-    const workers = d?.workers ?? [];
-    const orders = d?.orders ?? [];
-    return {
-      working: workers.filter((w) => w.presence === 'WORKING').length,
-      notStarted: workers.filter((w) => w.presence === 'NOT_STARTED').length,
-      hours: minutesToHours(workers.reduce((sum, w) => sum + w.minutesToday, 0)),
-      inProgress: orders.filter((o) => o.order.status === 'IN_PROGRESS').length,
-      issues: orders.filter((o) => o.order.status === 'ISSUE').length,
-    };
-  });
+  private readonly siteById = computed(() => new Map((this.data()?.sites ?? []).map((s) => [s.id, s])));
 
-  protected readonly siteById = computed(() => new Map((this.data()?.sites ?? []).map((s) => [s.id, s])));
+  protected readonly scopeName = computed(() => {
+    const site = this.site();
+    if (site) return this.siteById().get(site)?.name ?? '';
+    const project = this.project();
+    if (project) return this.data()?.projects.find((p) => p.id === project)?.name ?? '';
+    return '';
+  });
 
   /** Server rows, with orders saved on this device laid over them until the server confirms. */
   private readonly allRows = computed<readonly OrderRow[]>(() => {
@@ -541,32 +1034,41 @@ export class OverviewComponent implements OnInit {
     return rows;
   });
 
-  protected readonly orderRows = computed(() => {
-    const q = this.query().trim().toLocaleLowerCase();
+  private readonly words = computed(() => this.store.query().trim().toLocaleLowerCase().split(/\s+/).filter(Boolean));
+
+  /** Rows inside the project or object scope that match the search, before the status filter. */
+  private readonly scopedRows = computed(() => {
     const site = this.site();
+    const project = this.project();
+    const words = this.words();
+    return this.allRows().filter((r) => {
+      if (site && r.order.siteId !== site) return false;
+      if (!site && project && r.order.projectId !== project) return false;
+      const hay = `${r.order.code ?? ''} ${r.order.title} ${r.crewNames.join(' ')} ${r.order.location} ${r.order.siteName}`.toLocaleLowerCase();
+      return words.every((w) => hay.includes(w));
+    });
+  });
+
+  protected readonly counts = computed<Readonly<Record<StatusTab, number>>>(() => {
+    const rows = this.scopedRows();
+    const by = (s: WorkOrderStatus): number => rows.filter((r) => r.order.published && !r.pending && r.order.status === s).length;
+    return { ALL: rows.length, NEW: by('NEW'), IN_PROGRESS: by('IN_PROGRESS'), COMPLETED: by('COMPLETED'), ISSUE: by('ISSUE') };
+  });
+
+  protected readonly orderRows = computed(() => {
+    const status = this.status();
     const { key, dir } = this.sort();
-    const rows = this.allRows().filter(
-      (r) =>
-        (site === null || r.order.siteId === site) &&
-        (!this.onlyIssues() || r.order.status === 'ISSUE') &&
-        (!q || `${r.order.code ?? ''} ${r.order.title} ${r.crewNames.join(' ')} ${r.order.location}`.toLocaleLowerCase().includes(q)),
-    );
+    const rows = this.scopedRows().filter((r) => status === 'ALL' || (!r.pending && r.order.published && r.order.status === status));
     const value = (r: OrderRow): number | string => {
       switch (key) {
-        case 'status':
-          return r.pending ? -2 : !r.order.published ? -1 : STATUS_RANK[r.order.status];
         case 'code':
           return r.order.code ?? '';
         case 'title':
           return r.order.title;
         case 'worker':
           return r.crewNames[0] ?? '￿';
-        case 'site':
-          return this.siteLabel(r.order.siteId);
-        case 'today':
-          return r.minutesToday;
-        case 'total':
-          return r.minutesTotal;
+        case 'status':
+          return r.pending ? -2 : !r.order.published ? -1 : STATUS_RANK[r.order.status];
         case 'progress':
           return this.progress(r);
       }
@@ -574,38 +1076,99 @@ export class OverviewComponent implements OnInit {
     return [...rows].sort((a, b) => {
       const va = value(a);
       const vb = value(b);
-      const c = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), this.i18n.locale());
-      return c * dir || (a.order.code ?? '').localeCompare(b.order.code ?? '');
+      const c = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), this.i18n.locale(), { numeric: true });
+      return c * dir || compareCodes(a.order.code, b.order.code);
     });
   });
 
+  protected readonly page = signal(0);
+  protected readonly pageCount = computed(() => Math.max(1, Math.ceil(this.orderRows().length / PAGE_SIZE)));
+  protected readonly pages = computed(() => Array.from({ length: this.pageCount() }, (_, i) => i));
+  protected readonly pageRows = computed(() => {
+    const p = Math.min(this.page(), this.pageCount() - 1);
+    return this.orderRows().slice(p * PAGE_SIZE, (p + 1) * PAGE_SIZE);
+  });
+  protected readonly pageFrom = computed(() => Math.min(this.orderRows().length, Math.min(this.page(), this.pageCount() - 1) * PAGE_SIZE + 1));
+  protected readonly pageTo = computed(() => Math.min(this.orderRows().length, (Math.min(this.page(), this.pageCount() - 1) + 1) * PAGE_SIZE));
+
   protected readonly workerRows = computed(() => {
-    const q = this.query().trim().toLocaleLowerCase();
+    const words = this.words();
     const site = this.site();
-    const withIssues = new Set((this.data()?.orders ?? []).filter((o) => o.order.status === 'ISSUE').flatMap((o) => o.order.crew.map((c) => c.id)));
+    const project = this.project();
     return (this.data()?.workers ?? [])
-      .filter(
-        (w: WorkerOverview) =>
-          (site === null || w.site?.id === site) &&
-          (!this.onlyIssues() || withIssues.has(w.user.id)) &&
-          (!q || `${w.user.displayName} ${w.user.crew ?? ''} ${w.activeOrderCode ?? ''}`.toLocaleLowerCase().includes(q)),
-      )
+      .filter((w: WorkerOverview) => {
+        if (site && w.site?.id !== site) return false;
+        if (!site && project && w.site?.projectId !== project) return false;
+        const hay = `${w.user.displayName} ${w.user.crew ?? ''} ${w.activeOrderCode ?? ''}`.toLocaleLowerCase();
+        return words.every((x) => hay.includes(x));
+      })
       .sort((a, b) => PRESENCE_RANK[a.presence] - PRESENCE_RANK[b.presence] || a.user.displayName.localeCompare(b.user.displayName));
   });
 
   protected readonly selectedCode = computed(() => {
     const p = this.panel();
-    return p?.kind === 'order' ? (this.data()?.orders.find((o) => o.order.id === p.id)?.order.code ?? '') : '';
+    return p?.kind === 'order' ? (this.allRows().find((o) => o.order.id === p.id)?.order.code ?? '') : '';
   });
 
-  /** `?order=<id>` from the projects list opens that order's drill-down. */
-  readonly order = input<string | undefined>(undefined);
+  constructor() {
+    // A new filter, search, sort or scope starts again at the first page.
+    effect(() => {
+      this.status();
+      this.sort();
+      this.words();
+      this.site();
+      this.project();
+      untracked(() => this.page.set(0));
+    });
+    // The team view needs the full width for its columns: an order left open from the orders view closes.
+    effect(() => {
+      if (this.mode() !== 'workers') return;
+      untracked(() => {
+        if (this.panel()?.kind === 'order') this.panel.set(null);
+      });
+    });
+    // `?review=next` opens the oldest report waiting for a decision once the day has loaded.
+    effect(() => {
+      if (this.review() !== 'next') return;
+      const next = this.store.toReview()[0];
+      if (next) untracked(() => this.panel.set({ kind: 'report', id: next.id }));
+    });
+    // A linked order (`?order=`) opens on its own page.
+    effect(() => {
+      const id = this.order();
+      if (id) untracked(() => void this.router.navigate(['/m/orders', id], { replaceUrl: true }));
+    });
+    // A linked daily report (`?report=`) opens in the panel.
+    effect(() => {
+      const id = this.report();
+      if (id) untracked(() => this.panel.set({ kind: 'report', id }));
+    });
+  }
 
   ngOnInit(): void {
     void this.store.load();
     void this.store.loadDirectory();
-    const id = this.order();
-    if (id) this.panel.set({ kind: 'order', id });
+
+    if (typeof matchMedia === 'function') {
+      const mq = matchMedia('(min-width: 1360px)');
+      this.docked.set(mq.matches);
+      const onChange = (e: MediaQueryListEvent): void => this.docked.set(e.matches);
+      mq.addEventListener('change', onChange);
+      this.destroyRef.onDestroy(() => mq.removeEventListener('change', onChange));
+    }
+    // Keep the day's picture fresh while the office has signal.
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible' && this.store.state() !== 'LOADING') void this.store.load();
+    }, 60_000);
+    this.destroyRef.onDestroy(() => clearInterval(timer));
+  }
+
+  /** ⌘K / Ctrl+K focuses the search, as the hint in the field promises. */
+  protected onKey(e: KeyboardEvent): void {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      this.searchEl()?.nativeElement.focus();
+    }
   }
 
   protected onDate(event: Event): void {
@@ -625,61 +1188,58 @@ export class OverviewComponent implements OnInit {
     return s.key === key ? (s.dir === 1 ? 'ascending' : 'descending') : null;
   }
 
-  /** Server rows open the drill-down; an order still on its way can only be edited. */
+  /** Server rows open the order's page; an order still on its way can only be edited. */
   protected openRow(row: OrderRow): void {
     if (row.pending && !this.data()?.orders.some((o) => o.order.id === row.order.id)) {
       void this.router.navigate(['/m/orders', row.order.id, 'edit']);
       return;
     }
-    const p = this.panel();
-    this.panel.set(p?.kind === 'order' && p.id === row.order.id ? null : { kind: 'order', id: row.order.id });
+    void this.router.navigate(['/m/orders', row.order.id]);
+  }
+
+  protected closePanel(): void {
+    this.userClosed = true;
+    this.panel.set(null);
+    if (this.review()) void this.router.navigate(['/m']);
   }
 
   protected openReport(id: string): void {
     this.panel.set({ kind: 'report', id });
   }
 
-  protected openNextReport(): void {
-    const next = this.store.toReview()[0];
-    if (next) this.openReport(next.id);
-  }
-
   protected selectByCode(code: string): void {
     const row = this.data()?.orders.find((o) => o.order.code === code);
-    if (row) this.panel.set({ kind: 'order', id: row.order.id });
+    if (row) void this.router.navigate(['/m'], { queryParams: { order: row.order.id } });
   }
 
   protected clearFilters(): void {
-    this.site.set(null);
-    this.onlyIssues.set(false);
-    this.query.set('');
-  }
-
-  protected siteLabel(siteId: string): string {
-    const s = this.siteById().get(siteId);
-    return s ? `${s.projectName} · ${s.name}` : siteId;
-  }
-
-  /** The project name, unless the project has several objects: then the object tells them apart. */
-  protected chipLabel(s: Site): string {
-    const siblings = (this.data()?.sites ?? []).filter((x) => x.projectId === s.projectId).length;
-    return siblings > 1 ? s.name : s.projectName;
+    this.status.set('ALL');
+    this.store.query.set('');
+    if (this.site() || this.project()) void this.router.navigate(['/m']);
   }
 
   protected crew(names: readonly string[]): string {
-    return crewLabel(names, this.i18n.t('mgr.unassigned'));
+    return names.length > 1 ? `${names[0] ?? ''} +${names.length - 1}` : (names[0] ?? '');
+  }
+
+  protected initials(name: string | undefined): string {
+    return initialsOf(name ?? '');
+  }
+
+  protected tone(name: string | undefined): number {
+    return avatarTone(name ?? '');
   }
 
   protected progress(r: OrderOverview): number {
     return progressRatio(r.order.doneQty, r.order.plannedQty);
   }
 
-  protected duration(minutes: number): string {
-    return minutes > 0 ? formatDuration(minutes) : this.i18n.t('common.none');
-  }
-
   protected unitKey(unit: QuantityUnit): `unit.${QuantityUnit}` {
     return `unit.${unit}`;
+  }
+
+  protected statusKey(status: WorkOrderStatus): `status.${WorkOrderStatus}` {
+    return `status.${status}`;
   }
 
   protected presenceKey(p: WorkerPresence): TranslationKey {

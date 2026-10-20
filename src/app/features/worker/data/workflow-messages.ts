@@ -12,6 +12,8 @@ const MESSAGES: Readonly<Record<WorkflowError['code'], TranslationKey>> = {
   INVALID_INPUT: 'order.textRequired',
   INVALID_TIME: 'stale.invalidTime',
   REPORT_LOCKED: 'day.locked',
+  DAY_CLOSED: 'day.closedBlock',
+  NO_SITE: 'site.required',
   STORAGE_FULL: 'photo.storageFull',
 };
 
@@ -31,4 +33,9 @@ export function orderElapsedMs(
   return entries
     .filter((e) => e.kind === 'ORDER' && e.workOrderId === orderId)
     .reduce((sum, e) => sum + Math.max(0, (e.endedAt ?? now) - e.startedAt), 0);
+}
+
+/** "Začetek dela zabeležen ob 7:02 · Hiša Novak · Maribor." */
+export function startedMessage(i18n: I18nService, at: number, siteName: string | null): string {
+  return siteName ? i18n.t('shift.startedAtSiteToast', { time: i18n.time(at), site: siteName }) : i18n.t('shift.startedToast', { time: i18n.time(at) });
 }

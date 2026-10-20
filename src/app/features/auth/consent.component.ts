@@ -20,42 +20,42 @@ import { LogoComponent } from '../../shared/ui/logo.component';
   imports: [RouterLink, IconComponent, LogoComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="min-h-dvh bg-charcoal">
+    <div class="min-h-dvh bg-[var(--color-rail)]">
       <dialog
         #dialog
-        class="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-xl overflow-y-auto border-0 bg-stock p-0 text-ink backdrop:bg-charcoal"
+        class="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-xl border-0 bg-white p-0 text-ink backdrop:bg-[var(--color-rail)]"
         aria-labelledby="consent-title"
         (cancel)="$event.preventDefault()"
       >
-        <header class="flex items-center justify-between bg-charcoal px-5 py-4 text-white sm:px-6">
-          <aon-logo [size]="1.5" />
-          <span class="label-caps text-on-dark-muted">{{ i18n.t('consent.version', { v: version }) }}</span>
+        <header class="flex items-center justify-between border-b border-[var(--color-line)] px-5 py-4 sm:px-6">
+          <aon-logo [size]="1.2" />
+          <span class="text-sm text-ink-muted">{{ i18n.t('consent.version', { v: version }) }}</span>
         </header>
         <div class="px-5 pb-6 pt-5 sm:px-6">
-          <h1 id="consent-title" class="font-cond text-[2.25rem] leading-tight">{{ i18n.t('consent.title') }}</h1>
-          <p class="mt-2 text-lg">{{ i18n.t('consent.intro') }}</p>
-          <ul class="mt-5 divide-y-2 divide-ground-deep border-y-2 border-charcoal">
+          <h1 id="consent-title" class="text-[clamp(1.35rem,1.2rem+0.6vw,1.65rem)] font-semibold leading-tight tracking-tight">{{ i18n.t('consent.title') }}</h1>
+          <p class="mt-2 leading-relaxed text-ink-muted">{{ i18n.t('consent.intro') }}</p>
+          <ul class="mt-4 divide-y divide-[var(--color-line)] border-y border-[var(--color-line)]">
             @for (p of points; track p.key) {
-              <li class="flex gap-3 py-3.5">
-                <aon-icon [name]="p.icon" [size]="24" class="mt-0.5 text-gold-ink" />
-                <p class="leading-snug">{{ i18n.t(p.key) }}</p>
+              <li class="flex gap-3 py-3">
+                <aon-icon [name]="p.icon" [size]="18" class="mt-0.5 shrink-0 text-gold" />
+                <p class="text-[0.95rem] leading-snug">{{ i18n.t(p.key) }}</p>
               </li>
             }
           </ul>
-          <a routerLink="/privacy" class="mt-4 inline-flex min-h-12 items-center gap-2 font-bold underline">
-            <aon-icon name="file" [size]="20" />{{ i18n.t('login.privacyLink') }}
+          <a routerLink="/privacy" class="mt-3 inline-flex min-h-11 items-center gap-2 font-medium underline decoration-[var(--color-line-strong)] underline-offset-4">
+            <aon-icon name="file" [size]="16" />{{ i18n.t('login.privacyLink') }}
           </a>
-          <div class="mt-5 grid gap-3">
+          <div class="mt-4 grid gap-2">
             <button
               type="button"
-              class="flex min-h-16 items-center justify-between bg-gold px-6 font-cond text-2xl text-ink disabled:opacity-60"
+              class="flex min-h-12 items-center justify-center gap-2 rounded-lg bg-gold px-5 font-semibold text-charcoal disabled:opacity-60"
               [disabled]="busy()"
               (click)="accept()"
             >
+              <aon-icon name="check" [size]="18" [stroke]="2.25" />
               {{ i18n.t('consent.accept') }}
-              <aon-icon name="check" [size]="28" [stroke]="3" />
             </button>
-            <button type="button" class="min-h-14 border-2 border-charcoal px-6 font-cond text-lg" [disabled]="busy()" (click)="decline()">
+            <button type="button" class="min-h-12 rounded-lg border border-[var(--color-line-strong)] px-5 font-medium" [disabled]="busy()" (click)="decline()">
               {{ i18n.t('consent.decline') }}
             </button>
           </div>

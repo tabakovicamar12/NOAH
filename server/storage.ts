@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, normalize, sep } from 'node:path';
 import { signFileKey } from './auth';
 import type { ServerConfig } from './config';
@@ -8,6 +8,8 @@ export interface PhotoStore {
   put(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
   /** A time-limited URL an <img> can load without credentials. */
   url(key: string): Promise<string | null>;
+  /** Deletes the binaries (retention). Keys that are already gone are not an error. */
+  remove(keys: readonly string[]): Promise<void>;
 }
 
 const URL_TTL_SECONDS = 60 * 60;
@@ -46,6 +48,16 @@ function supabaseStore(baseUrl: string, serviceKey: string, bucket: string): Pho
       const signed = body.signedURL ?? body.signedUrl;
       return signed ? `${baseUrl}/storage/v1${signed.startsWith('/') ? '' : '/'}${signed}` : null;
     },
+    async remove(keys) {
+      for (let i = 0; i < keys.length; i += 100) {
+        const res = await fetch(`${baseUrl}/storage/v1/object/${bucket}`, {
+          method: 'DELETE',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prefixes: keys.slice(i, i + 100) }),
+        });
+        if (!res.ok) throw new Error(`Storage delete failed: ${res.status} ${await res.text()}`);
+      }
+    },
   };
 }
 
@@ -59,6 +71,9 @@ function localStore(config: ServerConfig): PhotoStore {
     },
     async url(key) {
       return `/api/v1/files?t=${encodeURIComponent(await signFileKey(config, key, URL_TTL_SECONDS))}`;
+    },
+    async remove(keys) {
+      for (const key of keys) await rm(safeJoin(root, key), { force: true });
     },
   };
 }

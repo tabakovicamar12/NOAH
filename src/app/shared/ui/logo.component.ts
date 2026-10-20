@@ -1,19 +1,20 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
-/** AON wordmark set in condensed Archivo with the gold eyelet of an inspection tag. */
+/** The AON · NOAH wordmark, as on the office rail: Inter 500, NOAH in gold. */
 @Component({
   selector: 'aon-logo',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'inline-flex items-center gap-2' },
+  host: { class: 'inline-flex items-baseline gap-[0.35em] leading-none', '[style.font-size.rem]': 'size()' },
   template: `
-    <span class="relative inline-block size-3 rounded-full bg-gold ring-[3px] ring-inset ring-charcoal-deep" aria-hidden="true"></span>
-    <span class="font-cond-tight leading-none tracking-[0.08em]" [style.font-size.rem]="size()">AON</span>
+    <span class="font-medium tracking-[0.01em]">AON</span>
+    <span class="opacity-50" aria-hidden="true">·</span>
+    <span class="font-medium tracking-[0.01em] text-gold">NOAH</span>
     @if (sub()) {
-      <span class="label-caps ml-1 leading-none opacity-80">{{ sub() }}</span>
+      <span class="ml-1 text-[0.55em] opacity-70">{{ sub() }}</span>
     }
   `,
 })
 export class LogoComponent {
-  readonly size = input<number>(1.75);
+  readonly size = input<number>(1.45);
   readonly sub = input<string>('');
 }

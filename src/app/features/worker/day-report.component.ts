@@ -29,180 +29,178 @@ function toTimeInput(ms: number): string {
   imports: [RouterLink, HoldButtonComponent, IconComponent, ReportStatusComponent, VoiceButtonComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="px-4 pb-8 pt-4">
-      <header class="border-b-2 border-charcoal pb-3">
-        <h1 class="font-cond-tight text-[2.5rem] leading-none">{{ i18n.t('day.title') }}</h1>
-        <div class="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-          <p class="font-semibold text-ink-muted">{{ i18n.dateLong(store.today()) }} · {{ session.user()?.displayName }}</p>
-          <aon-report-status [status]="status()" />
+    <div class="w-page">
+      <header class="head">
+        <div class="min-w-0">
+          <h1 class="w-h1">{{ i18n.t('day.title') }}</h1>
+          <p class="w-small w-muted mt-0.5">{{ i18n.dateLong(store.today()) }} · {{ session.user()?.displayName }}</p>
         </div>
+        <aon-report-status [status]="status()" />
       </header>
 
-      @if (summary(); as s) {
-        @if (s.status === 'RETURNED') {
-          <section class="mt-4 border-2 border-hold bg-hold-pale px-4 py-3" role="status">
-            <p class="flex items-center gap-2 font-cond text-xl text-hold-ink"><aon-icon name="alert" [size]="22" />{{ i18n.t('day.returned') }}</p>
-            @if (s.reviewerNote) {
-              <p class="mt-1 text-lg font-semibold leading-snug">»{{ s.reviewerNote }}«</p>
-            }
-            <p class="mt-1 text-sm font-semibold text-hold-ink">{{ i18n.t('day.reviewedBy', { name: s.reviewerName ?? '', time: i18n.time(s.reviewedAt) }) }}</p>
-          </section>
+      <div class="w-stack mt-3">
+        @if (summary(); as s) {
+          @if (s.status === 'RETURNED') {
+            <section class="w-alert" role="status">
+              <aon-icon name="alert" [size]="18" />
+              <span>
+                <span class="block font-semibold">{{ i18n.t('day.returned') }}</span>
+                @if (s.reviewerNote) {
+                  <span class="mt-0.5 block text-[var(--color-text)]">»{{ s.reviewerNote }}«</span>
+                }
+                <span class="mt-0.5 block w-small">{{ i18n.t('day.reviewedBy', { name: s.reviewerName ?? '', time: i18n.time(s.reviewedAt) }) }}</span>
+              </span>
+            </section>
+          }
         }
-      }
 
-      @if (!hasDay()) {
-        <section class="mt-6 border-2 border-dashed border-charcoal px-5 py-6">
-          <p class="font-cond text-2xl">{{ i18n.t('day.nothing') }}</p>
-          <p class="mt-1 text-ink-muted">{{ i18n.t('day.nothingHint') }}</p>
-          <a routerLink="/w/orders" class="mt-4 flex min-h-14 items-center justify-between bg-charcoal px-5 font-cond text-xl text-white no-underline">
-            {{ i18n.t('day.toOrders') }}<aon-icon name="chevron-right" [size]="24" [stroke]="2.75" />
-          </a>
-        </section>
-      } @else {
-        <!-- Locked times -->
-        <section class="mt-5" aria-labelledby="times-title">
-          <h2 id="times-title" class="flex items-center gap-2 label-caps text-ink-muted"><aon-icon name="shield" [size]="16" />{{ i18n.t('day.lockedTimes') }}</h2>
-          <dl class="mt-2 grid grid-cols-3 border-2 border-charcoal bg-stock">
-            <div class="border-r-2 border-charcoal px-3 py-3">
-              <dt class="label-caps text-ink-muted">{{ i18n.t('day.arrival') }}</dt>
-              <dd class="mt-1 font-cond-tight text-[2rem] leading-none">{{ i18n.time(view().arrivalAt) }}</dd>
-            </div>
-            <div class="border-r-2 border-charcoal px-3 py-3">
-              <dt class="label-caps text-ink-muted">{{ i18n.t('day.departure') }}</dt>
-              <dd class="mt-1 font-cond-tight text-[2rem] leading-none">{{ view().departureAt ? i18n.time(view().departureAt) : i18n.t('day.stillWorking') }}</dd>
-            </div>
-            <div class="bg-charcoal px-3 py-3 text-white">
-              <dt class="label-caps text-on-dark-muted">{{ i18n.t('day.hours') }}</dt>
-              <dd class="mt-1 font-cond-tight text-[2rem] leading-none">{{ duration(view().shiftMinutes) }}</dd>
-            </div>
-          </dl>
-          @if (view().declaredEnd) {
-            <p class="mt-2 flex items-start gap-2 text-sm font-semibold text-hold-ink"><aon-icon name="clock" [size]="16" class="mt-0.5" />{{ i18n.t('day.declaredEnd') }}</p>
-          }
-
-          @if (draft().corrections.length) {
-            <ul class="mt-3 grid gap-2">
-              @for (c of draft().corrections; track $index) {
-                <li class="flex items-start justify-between gap-3 border-2 border-dashed border-charcoal bg-stock px-4 py-3">
-                  <span>
-                    <span class="block label-caps text-ink-muted">{{ i18n.t('day.correctionTitle') }}</span>
-                    <span class="block font-semibold">
-                      {{ i18n.t(c.field === 'ARRIVAL' ? 'day.arrival' : 'day.departure') }}: {{ i18n.time(c.recordedAt) }} → {{ i18n.time(c.proposedAt) }}
-                    </span>
-                    <span class="block text-[0.95rem] text-ink-muted">{{ c.reason }}</span>
-                  </span>
-                  @if (editable()) {
-                    <button type="button" class="grid size-12 shrink-0 place-items-center ring-2 ring-inset ring-charcoal" [attr.aria-label]="i18n.t('common.remove')" (click)="removeCorrection($index)">
-                      <aon-icon name="x" [size]="20" />
-                    </button>
-                  }
-                </li>
-              }
-            </ul>
-          }
-
-          @if (editable()) {
-            @if (!correcting()) {
-              <button type="button" class="mt-2 flex min-h-12 items-center gap-2 px-1 font-cond text-lg underline decoration-2 underline-offset-4" (click)="openCorrection()">
-                <aon-icon name="clock" [size]="18" />{{ i18n.t('day.timeWrong') }}
-              </button>
-            } @else {
-              <div class="mt-3 grid gap-3 border-2 border-charcoal bg-stock px-4 py-4">
-                <p class="font-semibold leading-snug">{{ i18n.t('day.correctionHint') }}</p>
-                <div class="grid grid-cols-2 border-2 border-charcoal" role="group" [attr.aria-label]="i18n.t('day.correctionTitle')">
-                  @for (f of correctionFields; track f) {
-                    <button
-                      type="button"
-                      class="min-h-14 font-cond text-lg"
-                      [class]="corrField() === f ? 'bg-charcoal text-white' : 'bg-stock'"
-                      [attr.aria-pressed]="corrField() === f"
-                      [disabled]="f === 'DEPARTURE' && !view().departureAt"
-                      (click)="corrField.set(f)"
-                    >
-                      {{ i18n.t(f === 'ARRIVAL' ? 'day.arrival' : 'day.departure') }}
-                    </button>
-                  }
-                </div>
-                <label class="block">
-                  <span class="label-caps text-ink-muted">{{ i18n.t('day.correctTime') }}</span>
-                  <input type="time" class="mt-1 block min-h-14 w-full border-2 border-charcoal bg-white px-3 font-cond text-2xl outline-none focus:ring-4 focus:ring-gold" [value]="corrTime()" (input)="corrTime.set($any($event.target).value)" />
-                </label>
-                <label class="block">
-                  <span class="label-caps text-ink-muted">{{ i18n.t('stale.reasonLabel') }}</span>
-                  <textarea rows="2" maxlength="500" class="mt-1 block w-full border-2 border-charcoal bg-white px-3 py-2 text-lg outline-none focus:ring-4 focus:ring-gold" [value]="corrReason()" (input)="corrReason.set($any($event.target).value)"></textarea>
-                </label>
-                <div class="grid grid-cols-2 gap-2">
-                  <button type="button" class="min-h-14 bg-charcoal font-cond text-lg text-white" (click)="addCorrection()">{{ i18n.t('day.addCorrection') }}</button>
-                  <button type="button" class="min-h-14 bg-stock font-cond text-lg ring-2 ring-inset ring-charcoal" (click)="correcting.set(false)">{{ i18n.t('common.cancel') }}</button>
-                </div>
+        @if (!hasDay()) {
+          <section class="w-card">
+            <p class="font-semibold">{{ i18n.t('day.nothing') }}</p>
+            <p class="w-small w-muted mt-1">{{ i18n.t('day.nothingHint') }}</p>
+            <a routerLink="/w/orders" class="w-btn w-btn-dark mt-3">{{ i18n.t('day.toOrders') }}<aon-icon name="chevron-right" [size]="18" [stroke]="2.25" /></a>
+          </section>
+        } @else {
+          <!-- Locked times: stamped by the ZAČNI / KONČAJ DELO holds, never typed -->
+          <section class="w-card" aria-labelledby="times-title">
+            <h2 id="times-title" class="locked"><aon-icon name="shield" [size]="14" [stroke]="2" />{{ i18n.t('day.lockedTimes') }}</h2>
+            <dl class="w-stats mt-2.5">
+              <div>
+                <dt>{{ i18n.t('day.arrival') }}</dt>
+                <dd>{{ i18n.time(view().arrivalAt) }}</dd>
               </div>
+              <div>
+                <dt>{{ i18n.t('day.departure') }}</dt>
+                <dd [class.still]="!view().departureAt">{{ view().departureAt ? i18n.time(view().departureAt) : i18n.t('day.stillWorking') }}</dd>
+              </div>
+              <div>
+                <dt>{{ i18n.t('day.hours') }}</dt>
+                <dd class="hours">{{ duration(view().shiftMinutes) }}</dd>
+              </div>
+            </dl>
+            @if (view().siteName; as site) {
+              <p class="w-small mt-2.5 flex items-start gap-1.5"><aon-icon name="pin" [size]="15" class="mt-0.5" /><span><span class="w-muted">{{ i18n.t('site.label') }}:</span> {{ site }}</span></p>
             }
-          }
-        </section>
+            @if (view().declaredEnd) {
+              <p class="w-small mt-2.5 flex items-start gap-1.5 text-[var(--color-bad-ink)]"><aon-icon name="clock" [size]="15" class="mt-0.5" />{{ i18n.t('day.declaredEnd') }}</p>
+            }
 
-        <!-- Orders worked today -->
-        <section class="mt-8" aria-labelledby="lines-title">
-          <div class="flex items-baseline justify-between border-b-2 border-charcoal pb-1">
-            <h2 id="lines-title" class="font-cond text-2xl">{{ i18n.t('day.ordersWorked') }}</h2>
-            <span class="font-cond text-xl">{{ i18n.t('day.onOrdersTotal', { duration: duration(view().orderMinutes) }) }}</span>
-          </div>
+            @if (draft().corrections.length) {
+              <ul class="w-rows mt-3">
+                @for (c of draft().corrections; track $index) {
+                  <li class="corr">
+                    <span class="min-w-0">
+                      <span class="w-small w-muted block">{{ i18n.t('day.correctionTitle') }}</span>
+                      <span class="block font-semibold">
+                        {{ i18n.t(c.field === 'ARRIVAL' ? 'day.arrival' : 'day.departure') }}: {{ i18n.time(c.recordedAt) }} → {{ i18n.time(c.proposedAt) }}
+                      </span>
+                      <span class="w-small w-muted block">{{ c.reason }}</span>
+                    </span>
+                    @if (editable()) {
+                      <button type="button" class="icon-btn" [attr.aria-label]="i18n.t('common.remove')" (click)="removeCorrection($index)">
+                        <aon-icon name="x" [size]="18" />
+                      </button>
+                    }
+                  </li>
+                }
+              </ul>
+            }
 
-          @for (line of view().lines; track line.workOrderId) {
-            <article class="mt-4 border-2 border-charcoal bg-stock" [attr.aria-label]="line.code ?? line.title">
-              <div class="flex items-start justify-between gap-3 bg-charcoal px-4 py-2.5 text-white">
-                <div class="min-w-0">
-                  <p class="font-cond-tight text-2xl leading-none">{{ line.code }}</p>
-                  <p class="mt-1 truncate font-semibold">{{ line.title }}</p>
-                  <p class="truncate text-sm text-on-dark-muted">{{ line.siteName }}</p>
+            @if (editable()) {
+              @if (!correcting()) {
+                <button type="button" class="w-btn w-btn-quiet mt-1.5" (click)="openCorrection()">
+                  <aon-icon name="clock" [size]="16" />{{ i18n.t('day.timeWrong') }}
+                </button>
+              } @else {
+                <div class="corr-form mt-3">
+                  <p class="w-small leading-snug">{{ i18n.t('day.correctionHint') }}</p>
+                  <div class="w-seg" role="group" [attr.aria-label]="i18n.t('day.correctionTitle')">
+                    @for (f of correctionFields; track f) {
+                      <button
+                        type="button"
+                        [attr.aria-pressed]="corrField() === f"
+                        [disabled]="f === 'DEPARTURE' && !view().departureAt"
+                        (click)="corrField.set(f)"
+                      >
+                        {{ i18n.t(f === 'ARRIVAL' ? 'day.arrival' : 'day.departure') }}
+                      </button>
+                    }
+                  </div>
+                  <label class="block">
+                    <span class="w-label">{{ i18n.t('day.correctTime') }}</span>
+                    <input type="time" class="w-field" [value]="corrTime()" (input)="corrTime.set($any($event.target).value)" />
+                  </label>
+                  <label class="block">
+                    <span class="w-label">{{ i18n.t('stale.reasonLabel') }}</span>
+                    <textarea rows="2" maxlength="500" class="w-field" [value]="corrReason()" (input)="corrReason.set($any($event.target).value)"></textarea>
+                  </label>
+                  <div class="w-pair">
+                    <button type="button" class="w-btn w-btn-line" (click)="correcting.set(false)">{{ i18n.t('common.cancel') }}</button>
+                    <button type="button" class="w-btn w-btn-dark" (click)="addCorrection()">{{ i18n.t('day.addCorrection') }}</button>
+                  </div>
                 </div>
-                <p class="shrink-0 text-right font-cond-tight text-[2rem] leading-none text-gold">{{ duration(line.minutes) }}</p>
-              </div>
-              <dl class="grid grid-cols-2 border-b-2 border-charcoal">
-                <div class="border-r-2 border-charcoal px-4 py-2">
-                  <dt class="label-caps text-ink-muted">{{ i18n.t('order.quantityTitle') }}</dt>
-                  <dd class="font-cond text-xl">{{ i18n.number(line.quantity) }} {{ i18n.t(unitKey(line.unit)) }}</dd>
-                </div>
-                <div class="px-4 py-2">
-                  <dt class="label-caps text-ink-muted">{{ i18n.t('day.photos') }}</dt>
-                  <dd class="font-cond text-xl">{{ line.photoCount }}</dd>
-                </div>
-              </dl>
+              }
+            }
+          </section>
 
-              <div class="grid gap-4 px-4 py-4">
+          <!-- Orders worked today -->
+          <section aria-labelledby="lines-title">
+            <h2 id="lines-title" class="w-h2">
+              {{ i18n.t('day.ordersWorked') }}
+              <small>{{ i18n.t('day.onOrdersTotal', { duration: duration(view().orderMinutes) }) }}</small>
+            </h2>
+
+            @for (line of view().lines; track line.workOrderId) {
+              <article class="w-card mt-2.5" [attr.aria-label]="line.code ?? line.title">
+                <div class="line-head">
+                  <div class="min-w-0">
+                    <p class="line-title"><span class="code">{{ line.code }}</span> · {{ line.title }}</p>
+                    <p class="w-small w-muted truncate">{{ line.siteName }}</p>
+                  </div>
+                  <p class="line-time">{{ duration(line.minutes) }}</p>
+                </div>
+                <p class="w-small w-muted mt-1.5">
+                  {{ i18n.t('order.quantityTitle') }} <b class="text-[var(--color-text)]">{{ i18n.number(line.quantity) }} {{ i18n.t(unitKey(line.unit)) }}</b>
+                  · {{ i18n.t('day.photos') }} <b class="text-[var(--color-text)]">{{ line.photoCount }}</b>
+                </p>
+
                 @if (line.issues.length) {
-                  <ul class="grid gap-1.5">
+                  <ul class="mt-2.5 grid gap-1.5">
                     @for (issue of line.issues; track $index) {
-                      <li class="flex items-start gap-2 bg-hold-pale px-3 py-2 font-semibold text-hold-ink"><aon-icon name="alert" [size]="18" class="mt-0.5" />{{ issue }}</li>
+                      <li class="w-alert"><aon-icon name="alert" [size]="16" />{{ issue }}</li>
                     }
                   </ul>
                 }
 
+                <div class="w-rule"></div>
                 <label class="block">
-                  <span class="label-caps text-ink-muted">{{ i18n.t('day.workDone') }}</span>
+                  <span class="w-label">{{ i18n.t('day.workDone') }}</span>
                   @if (editable()) {
                     <textarea
                       rows="3"
                       maxlength="4000"
-                      class="mt-1 block w-full border-2 border-charcoal bg-white px-3 py-2 text-lg leading-snug outline-none placeholder:text-ink-muted focus:ring-4 focus:ring-gold"
+                      class="w-field"
                       [placeholder]="i18n.t('day.workDonePlaceholder')"
                       [value]="workDone(line)"
                       (input)="setWorkDone(line.workOrderId, $any($event.target).value)"
                     ></textarea>
-                    <aon-voice-button class="mt-2" [compact]="true" (text)="appendWorkDone(line, $event)" />
                   } @else {
-                    <span class="mt-1 block whitespace-pre-line text-lg leading-snug">{{ line.workDone || i18n.t('common.none') }}</span>
+                    <span class="mt-0.5 block whitespace-pre-line leading-snug">{{ line.workDone || i18n.t('common.none') }}</span>
                   }
                 </label>
+                @if (editable()) {
+                  <aon-voice-button class="voice mt-2" [compact]="true" (text)="appendWorkDone(line, $event)" />
+                }
 
-                <div>
-                  <p class="label-caps text-ink-muted">{{ i18n.t('day.materialsUsed') }}</p>
+                <div class="mt-3">
+                  <p class="w-label">{{ i18n.t('day.materialsUsed') }}</p>
                   @if (editable()) {
-                    <ul class="mt-1 grid gap-2">
+                    <ul class="mt-1 grid gap-1.5">
                       @for (m of materials(line); track $index; let i = $index) {
-                        <li class="grid grid-cols-[1fr_5.5rem_3.5rem] gap-1.5">
+                        <li class="mat">
                           <input
                             type="text"
-                            class="min-h-14 min-w-0 border-2 border-charcoal bg-white px-3 font-semibold outline-none focus:ring-4 focus:ring-gold"
+                            class="w-field is-flush"
                             [attr.aria-label]="i18n.t('form.materialName')"
                             [value]="m.name"
                             (input)="setMaterial(line, i, { name: $any($event.target).value })"
@@ -212,7 +210,7 @@ function toTimeInput(ms: number): string {
                             inputmode="decimal"
                             min="0"
                             step="any"
-                            class="min-h-14 min-w-0 border-2 border-charcoal bg-white px-2 text-right font-cond text-xl outline-none focus:ring-4 focus:ring-gold"
+                            class="w-field is-flush text-right tabular-nums"
                             [attr.aria-label]="i18n.t('form.materialQty', { name: m.name })"
                             [placeholder]="i18n.t('day.qtyPlaceholder')"
                             [value]="m.qty ?? ''"
@@ -220,7 +218,7 @@ function toTimeInput(ms: number): string {
                           />
                           <input
                             type="text"
-                            class="min-h-14 min-w-0 border-2 border-charcoal bg-white px-2 text-center font-semibold outline-none focus:ring-4 focus:ring-gold"
+                            class="w-field is-flush is-tight text-center"
                             [attr.aria-label]="i18n.t('form.materialUnit')"
                             [value]="m.unit ?? ''"
                             (input)="setMaterial(line, i, { unit: $any($event.target).value || null })"
@@ -228,75 +226,74 @@ function toTimeInput(ms: number): string {
                         </li>
                       }
                     </ul>
-                    <button type="button" class="mt-2 flex min-h-12 items-center gap-2 px-1 font-cond text-lg underline decoration-2 underline-offset-4" (click)="addMaterial(line)">
-                      <aon-icon name="plus" [size]="18" [stroke]="3" />{{ i18n.t('form.addMaterial') }}
+                    <button type="button" class="w-btn w-btn-quiet mt-1" (click)="addMaterial(line)">
+                      <aon-icon name="plus" [size]="16" [stroke]="2.25" />{{ i18n.t('form.addMaterial') }}
                     </button>
                   } @else {
-                    <ul class="mt-1">
+                    <ul class="w-rows mt-1">
                       @for (m of line.materialsUsed; track $index) {
-                        <li class="flex justify-between gap-3 border-b border-rule-soft py-1.5"><span class="font-semibold">{{ m.name }}</span><span class="font-cond text-lg">{{ m.qty !== null ? i18n.number(m.qty) : '' }} {{ m.unit ?? '' }}</span></li>
+                        <li class="w-row"><span>{{ m.name }}</span><span class="font-semibold tabular-nums">{{ m.qty !== null ? i18n.number(m.qty) : '' }} {{ m.unit ?? '' }}</span></li>
                       } @empty {
-                        <li class="text-ink-muted">{{ i18n.t('common.none') }}</li>
+                        <li class="w-muted">{{ i18n.t('common.none') }}</li>
                       }
                     </ul>
                   }
                 </div>
-              </div>
-            </article>
-          } @empty {
-            <p class="mt-3 text-ink-muted">{{ i18n.t('day.noOrders') }}</p>
-          }
-        </section>
+              </article>
+            } @empty {
+              <p class="w-small w-muted mt-2">{{ i18n.t('day.noOrders') }}</p>
+            }
+          </section>
 
-        <section class="mt-8" aria-labelledby="comment-title">
-          <h2 id="comment-title" class="font-cond text-2xl">{{ i18n.t('day.comment') }}</h2>
-          @if (editable()) {
-            <textarea
-              rows="3"
-              maxlength="2000"
-              class="mt-2 block w-full border-2 border-charcoal bg-white px-3 py-2 text-lg leading-snug outline-none placeholder:text-ink-muted focus:ring-4 focus:ring-gold"
-              [placeholder]="i18n.t('day.commentPlaceholder')"
-              [value]="draft().comment"
-              (input)="patch({ comment: $any($event.target).value })"
-            ></textarea>
-            <aon-voice-button class="mt-2" [compact]="true" (text)="appendComment($event)" />
-            <p class="mt-1.5 flex items-center gap-1.5 text-sm font-semibold text-ink-muted" aria-live="polite">
-              <aon-icon [name]="saving() ? 'refresh' : 'check'" [size]="14" />{{ saving() ? i18n.t('day.savingDraft') : i18n.t('day.draftSaved') }}
-            </p>
-          } @else {
-            <p class="mt-2 whitespace-pre-line text-lg leading-snug">{{ summary()?.comment || i18n.t('common.none') }}</p>
-          }
-        </section>
-
-        @if (summary(); as s) {
-          @if (s.status === 'APPROVED') {
-            <div class="mt-8 flex items-center gap-3 border-[3px] border-done px-4 py-3 text-done" role="status">
-              <aon-icon name="circle-check" [size]="34" [stroke]="2.5" />
-              <p>
-                <span class="block font-cond-tight text-3xl leading-none">{{ i18n.t('day.stampApproved') }}</span>
-                <span class="block font-semibold text-ink">{{ i18n.t('day.reviewedBy', { name: s.reviewerName ?? '', time: i18n.time(s.reviewedAt) }) }}</span>
+          <section class="w-card" aria-labelledby="comment-title">
+            <h2 id="comment-title" class="w-h2">{{ i18n.t('day.comment') }}</h2>
+            @if (editable()) {
+              <textarea
+                rows="3"
+                maxlength="2000"
+                class="w-field mt-2"
+                [placeholder]="i18n.t('day.commentPlaceholder')"
+                [value]="draft().comment"
+                (input)="patch({ comment: $any($event.target).value })"
+              ></textarea>
+              <aon-voice-button class="voice mt-2" [compact]="true" (text)="appendComment($event)" />
+              <p class="w-small w-muted mt-2 flex items-center gap-1.5" aria-live="polite">
+                <aon-icon [name]="saving() ? 'refresh' : 'check'" [size]="14" />{{ saving() ? i18n.t('day.savingDraft') : i18n.t('day.draftSaved') }}
               </p>
-            </div>
-          } @else if (s.status === 'SUBMITTED') {
-            <p class="mt-8 flex items-center gap-2 border-2 bg-stock px-4 py-3 font-semibold" [class]="s.synced ? 'border-charcoal' : 'border-dashed border-charcoal'" role="status">
-              <aon-icon [name]="s.synced ? 'circle-check' : 'refresh'" [size]="20" [class]="s.synced ? 'text-done' : ''" />
-              {{ s.synced ? i18n.t('day.submitted', { time: i18n.time(s.submittedAt) }) : i18n.t('day.submittedPending') }}
-            </p>
+            } @else {
+              <p class="mt-1.5 whitespace-pre-line leading-snug">{{ summary()?.comment || i18n.t('common.none') }}</p>
+            }
+          </section>
+
+          @if (summary(); as s) {
+            @if (s.status === 'APPROVED') {
+              <div class="w-alert is-ok" role="status">
+                <aon-icon name="circle-check" [size]="20" />
+                <span>
+                  <span class="block font-semibold">{{ i18n.t('day.stampApproved') }}</span>
+                  <span class="block w-small">{{ i18n.t('day.reviewedBy', { name: s.reviewerName ?? '', time: i18n.time(s.reviewedAt) }) }}</span>
+                </span>
+              </div>
+            } @else if (s.status === 'SUBMITTED') {
+              <p class="w-alert is-info" role="status">
+                <aon-icon [name]="s.synced ? 'circle-check' : 'refresh'" [size]="18" />
+                {{ s.synced ? i18n.t('day.submitted', { time: i18n.time(s.submittedAt) }) : i18n.t('day.submittedPending') }}
+              </p>
+            }
           }
         }
-      }
+      </div>
     </div>
 
     @if (hasDay() && editable()) {
-      <div class="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t-2 border-charcoal bg-ground px-4 pb-3 pt-3">
+      <div class="w-slab">
         @if (store.openShift()) {
-          <p class="mb-2 font-semibold text-ink-muted">{{ i18n.t('day.needEnd') }}</p>
-          <a routerLink="/w/orders" class="flex min-h-16 items-center justify-between bg-charcoal px-5 font-cond text-xl text-white no-underline">
-            {{ i18n.t('day.toOrders') }}<aon-icon name="chevron-right" [size]="24" [stroke]="2.75" />
-          </a>
+          <p class="w-small w-muted mb-1.5 text-center">{{ i18n.t('day.needEnd') }}</p>
+          <a routerLink="/w/orders" class="w-btn w-btn-dark">{{ i18n.t('day.toOrders') }}<aon-icon name="chevron-right" [size]="18" [stroke]="2.25" /></a>
         } @else {
           <aon-hold-button
             tone="gold"
+            [height]="56"
             [label]="summary()?.status === 'RETURNED' ? i18n.t('day.resubmit') : i18n.t('day.submit')"
             [hint]="i18n.t('shift.holdHint')"
             [ariaLabel]="i18n.t('shift.holdAria', { label: i18n.t('day.submit') })"
@@ -305,6 +302,83 @@ function toTimeInput(ms: number): string {
           />
         }
       </div>
+    }
+  `,
+  styles: `
+    :host {
+      display: block;
+    }
+    .head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+    .head aon-report-status {
+      margin-top: 0.3rem;
+    }
+    .locked {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      color: var(--color-text-muted);
+      font-size: 0.8rem;
+      font-weight: 400;
+    }
+    .w-stats dd.still {
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+    .w-stats dd.hours {
+      color: var(--color-gold-ink);
+    }
+    .corr {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.6rem 0;
+    }
+    .icon-btn {
+      display: grid;
+      flex: 0 0 auto;
+      place-items: center;
+      width: 2.75rem;
+      height: 2.75rem;
+      border-radius: 0.5rem;
+      color: var(--color-text-muted);
+    }
+    .corr-form {
+      display: grid;
+      gap: 0.65rem;
+      padding: 0.8rem;
+      border-radius: 0.6rem;
+      background: var(--color-row-tint);
+      box-shadow: inset 0 0 0 1px var(--color-line);
+    }
+    .line-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+    .line-title {
+      font-weight: 600;
+      line-height: 1.3;
+    }
+    .line-time {
+      flex: 0 0 auto;
+      font-size: 1.35rem;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .mat {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 4.75rem 3.25rem;
+      gap: 0.35rem;
+    }
+    .voice {
+      max-width: 11rem;
     }
   `,
 })
@@ -336,11 +410,20 @@ export class DayReportComponent {
   protected readonly view = computed(() => {
     const s = this.summary();
     if (s && !this.editable()) {
-      return { arrivalAt: s.arrivalAt, departureAt: s.departureAt, shiftMinutes: s.shiftMinutes, orderMinutes: s.orderMinutes, declaredEnd: s.declaredEnd, lines: s.lines };
+      return {
+        arrivalAt: s.arrivalAt,
+        departureAt: s.departureAt,
+        siteName: s.siteName ?? null,
+        shiftMinutes: s.shiftMinutes,
+        orderMinutes: s.orderMinutes,
+        declaredEnd: s.declaredEnd,
+        lines: s.lines,
+      };
     }
     return {
       arrivalAt: this.store.arrivalAt(),
       departureAt: this.store.departureAt(),
+      siteName: this.store.daySiteNames(),
       shiftMinutes: this.store.shiftMinutes(),
       orderMinutes: this.store.orderMinutes(),
       declaredEnd: this.store.declaredEnd(),

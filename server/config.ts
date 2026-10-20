@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import type { OrgInfo } from '../src/app/core/models/api.models';
 
 /**
  * Runtime configuration, read once from the environment.
@@ -20,6 +21,8 @@ export interface ServerConfig {
   readonly staticDir: string | null;
   readonly corsOrigins: readonly string[];
   readonly maxPhotoBytes: number;
+  /** The employer (data controller): ORG_NAME, ORG_ADDRESS, ORG_TAX_ID, ORG_PRIVACY_CONTACT, ORG_DPO, PHOTO_RETENTION_DAYS. */
+  readonly org: OrgInfo;
 }
 
 const DEV_SECRET = 'aon-local-development-secret-not-for-production';
@@ -63,5 +66,18 @@ export function loadConfig(): ServerConfig {
       .filter(Boolean),
     // Vercel functions accept request bodies up to 4.5 MB; the app stores photos at ≤ 2048 px JPEG (~0.5–1.5 MB).
     maxPhotoBytes: Number(env('MAX_PHOTO_BYTES') ?? 4 * 1024 * 1024),
+    org: {
+      name: env('ORG_NAME'),
+      address: env('ORG_ADDRESS'),
+      taxId: env('ORG_TAX_ID'),
+      privacyContact: env('ORG_PRIVACY_CONTACT'),
+      dpo: env('ORG_DPO'),
+      photoRetentionDays: positiveInt(env('PHOTO_RETENTION_DAYS')),
+    },
   };
+}
+
+function positiveInt(value: string | null): number | null {
+  const n = Number(value);
+  return value !== null && Number.isInteger(n) && n > 0 ? n : null;
 }

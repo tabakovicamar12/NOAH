@@ -18,7 +18,7 @@ const STYLE: Readonly<Record<WorkOrderStatus, { readonly cls: string; readonly i
   selector: 'aon-status-tag',
   imports: [IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'inline-flex', '[class.tag-outline]': "status() === 'NEW'" },
+  host: { class: 'inline-flex', '[class.tag-outline]': "status() === 'NEW'", '[attr.data-s]': 'status()' },
   template: `
     <span
       class="tag-sm tag-shape-sm inline-flex items-center gap-1.5 whitespace-nowrap py-1 pr-2.5 label-caps leading-none"

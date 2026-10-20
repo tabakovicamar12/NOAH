@@ -1,5 +1,5 @@
 import type { Routes } from '@angular/router';
-import { authGuard, consentGuard, guestGuard, homeRedirectGuard, roleGuard } from './core/auth/guards';
+import { authGuard, consentGuard, deskGuard, guestGuard, homeRedirectGuard, workerGuard } from './core/auth/guards';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', canActivate: [homeRedirectGuard], children: [] },
@@ -22,13 +22,13 @@ export const routes: Routes = [
   },
   {
     path: 'w',
-    canActivate: [authGuard, roleGuard('WORKER'), consentGuard],
+    canActivate: [authGuard, workerGuard, consentGuard],
     loadComponent: () => import('./features/worker/worker-shell.component').then((m) => m.WorkerShellComponent),
     loadChildren: () => import('./features/worker/worker.routes').then((m) => m.WORKER_ROUTES),
   },
   {
     path: 'm',
-    canActivate: [authGuard, roleGuard('MANAGER'), consentGuard],
+    canActivate: [authGuard, deskGuard, consentGuard],
     loadComponent: () => import('./features/manager/manager-shell.component').then((m) => m.ManagerShellComponent),
     loadChildren: () => import('./features/manager/manager.routes').then((m) => m.MANAGER_ROUTES),
   },

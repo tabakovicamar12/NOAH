@@ -2,7 +2,8 @@ import { Injectable, computed, inject } from '@angular/core';
 import { DatabaseService } from '../db/database.service';
 import { ApiClient } from '../http/api-client.service';
 import { ApiError } from '../models/api.models';
-import type { Role, User } from '../models/domain.models';
+import type { LoginConsents, LoginSide } from '../models/api.models';
+import { CONSENT_VERSION, VOICE_CONSENT_VERSION, type User } from '../models/domain.models';
 import { NetworkStatusService } from '../network/network-status.service';
 import { SessionStore } from './session.store';
 
@@ -41,11 +42,12 @@ export class AuthService {
     }
   }
 
-  async login(username: string, password: string, role: Role): Promise<LoginOutcome> {
+  async login(username: string, password: string, role: LoginSide): Promise<LoginOutcome> {
     if (!this.network.online()) return { ok: false, reason: 'OFFLINE' };
     try {
       const res = await this.api.login({ username: username.trim(), password, role });
       await this.db.session.put({ key: 'current', user: res.user, token: res.token, expiresAt: res.expiresAt });
+      await this.adoptConsents(res.user.id, res.consents);
       this.store.session.set({ user: res.user, token: res.token, expiresAt: res.expiresAt });
       this.store.expired.set(false);
       return { ok: true, user: res.user };
@@ -58,6 +60,29 @@ export class AuthService {
       }
       console.error('[AON] login failed', err);
       return { ok: false, reason: 'UNKNOWN' };
+    }
+  }
+
+  /**
+   * Takes over what the account acknowledged on another device, so the notice is not shown again.
+   * A voice decision still waiting in this device's queue is newer than the server's and wins.
+   */
+  private async adoptConsents(userId: string, consents: LoginConsents | undefined): Promise<void> {
+    if (!consents) return;
+    try {
+      const pending = await this.db.syncQueue.where('userId').equals(userId).filter((q) => q.op.type === 'CONSENT').toArray();
+      const notice = consents.notice;
+      if (notice?.version === CONSENT_VERSION && !(await this.db.consents.get(userId))) {
+        await this.db.consents.put({ userId, version: notice.version, acceptedAt: notice.acceptedAt });
+      }
+      const voice = consents.voice;
+      if (voice && !pending.some((q) => q.entityKey === `consent:${userId}:voice`)) {
+        if (voice.version === VOICE_CONSENT_VERSION) await this.db.kv.put({ key: `voice-consent:${userId}`, value: { version: voice.version, at: voice.acceptedAt } });
+        else await this.db.kv.delete(`voice-consent:${userId}`);
+      }
+    } catch (err: unknown) {
+      // Worst case the notice is shown once more.
+      console.warn('[AON] could not store consents from the server', err);
     }
   }
 

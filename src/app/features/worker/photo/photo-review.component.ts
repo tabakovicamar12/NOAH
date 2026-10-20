@@ -38,20 +38,20 @@ type Phase = 'DECODING' | 'READY' | 'FAILED' | 'SAVING';
   imports: [IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
-    class: 'fixed inset-0 z-[70] flex flex-col bg-charcoal-deep text-white',
+    class: 'fixed inset-0 z-[70] flex flex-col bg-[#1f1e1d] text-white',
     role: 'dialog',
     'aria-modal': 'true',
     '[attr.aria-label]': "i18n.t('photo.title')",
     '(document:keydown.escape)': 'cancel()',
   },
   template: `
-    <div class="flex items-center justify-between gap-3 bg-charcoal px-4 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)]">
+    <div class="flex items-center justify-between gap-3 px-4 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)]">
       <p class="min-w-0">
-        <span class="block font-cond text-2xl leading-tight">{{ i18n.t('photo.title') }}</span>
-        <span class="block truncate text-sm font-semibold text-on-dark-muted">{{ orderLabel() }}</span>
+        <span class="block text-lg font-semibold leading-tight">{{ i18n.t('photo.title') }}</span>
+        <span class="block truncate text-sm text-on-dark-muted">{{ orderLabel() }}</span>
       </p>
-      <button type="button" class="grid size-14 place-items-center ring-2 ring-inset ring-white/40" [attr.aria-label]="i18n.t('common.cancel')" (click)="cancel()">
-        <aon-icon name="x" [size]="26" [stroke]="2.5" />
+      <button type="button" class="grid size-12 place-items-center rounded-lg bg-white/10" [attr.aria-label]="i18n.t('common.cancel')" (click)="cancel()">
+        <aon-icon name="x" [size]="22" [stroke]="2" />
       </button>
     </div>
 
@@ -60,12 +60,12 @@ type Phase = 'DECODING' | 'READY' | 'FAILED' | 'SAVING';
       <div #stage class="relative grid place-items-center px-4 pt-4">
         @switch (phase()) {
           @case ('DECODING') {
-            <div class="grid h-56 w-full place-items-center bg-charcoal" aria-busy="true">
-              <span class="font-cond text-xl text-on-dark-muted">{{ i18n.t('photo.processing') }}</span>
+            <div class="grid h-56 w-full place-items-center rounded-xl bg-white/5" aria-busy="true">
+              <span class="text-on-dark-muted">{{ i18n.t('photo.processing') }}</span>
             </div>
           }
           @case ('FAILED') {
-            <div class="w-full border-2 border-hold bg-hold px-4 py-5 font-semibold" role="alert">
+            <div class="w-full rounded-xl bg-[var(--color-bad)] px-4 py-5 font-semibold" role="alert">
               <aon-icon name="image-off" [size]="26" />
               <p class="mt-2">{{ i18n.t('photo.processFailed') }}</p>
             </div>
@@ -73,7 +73,7 @@ type Phase = 'DECODING' | 'READY' | 'FAILED' | 'SAVING';
           @default {
             <canvas
               #canvas
-              class="block touch-none select-none ring-2 ring-white/25"
+              class="block touch-none select-none rounded-md"
               [style.width.px]="view().width"
               [style.height.px]="view().height"
               role="img"
@@ -89,16 +89,16 @@ type Phase = 'DECODING' | 'READY' | 'FAILED' | 'SAVING';
 
       @if (phase() !== 'FAILED' && phase() !== 'DECODING') {
         <div class="px-4 pt-3">
-          <p class="flex items-start gap-2 text-[0.95rem] font-semibold text-on-dark-muted">
-            <aon-icon name="eye-off" [size]="20" class="mt-0.5 text-gold" />{{ i18n.t('photo.instruction') }}
+          <p class="flex items-start gap-2 text-[0.93rem] text-on-dark-muted">
+            <aon-icon name="eye-off" [size]="18" class="mt-0.5 text-gold" />{{ i18n.t('photo.instruction') }}
           </p>
           <div class="mt-3 flex items-center justify-between gap-2">
-            <span class="label-caps text-on-dark-muted" aria-live="polite">{{ i18n.t('photo.masks', { n: masks().length }) }}</span>
+            <span class="text-sm text-on-dark-muted" aria-live="polite">{{ i18n.t('photo.masks', { n: masks().length }) }}</span>
             <span class="flex gap-2">
-              <button type="button" class="flex min-h-12 items-center gap-2 px-4 font-cond text-lg ring-2 ring-inset ring-white/40 disabled:opacity-40" [disabled]="masks().length === 0" (click)="undo()">
-                <aon-icon name="undo" [size]="20" />{{ i18n.t('photo.undo') }}
+              <button type="button" class="flex min-h-11 items-center gap-2 rounded-lg bg-white/10 px-3.5 text-[0.93rem] font-semibold disabled:opacity-40" [disabled]="masks().length === 0" (click)="undo()">
+                <aon-icon name="undo" [size]="17" />{{ i18n.t('photo.undo') }}
               </button>
-              <button type="button" class="flex min-h-12 items-center gap-2 px-4 font-cond text-lg ring-2 ring-inset ring-white/40 disabled:opacity-40" [disabled]="masks().length === 0" (click)="masks.set([])">
+              <button type="button" class="flex min-h-11 items-center gap-2 rounded-lg bg-white/10 px-3.5 text-[0.93rem] font-semibold disabled:opacity-40" [disabled]="masks().length === 0" (click)="masks.set([])">
                 {{ i18n.t('photo.clear') }}
               </button>
             </span>
@@ -106,30 +106,30 @@ type Phase = 'DECODING' | 'READY' | 'FAILED' | 'SAVING';
         </div>
 
         <!-- Panel -->
-        <div class="mt-4 grid gap-5 bg-ground px-4 pb-6 pt-5 text-ink">
+        <div class="panel mt-4 grid gap-4 px-4 pb-6 pt-5 text-ink">
           <fieldset>
-            <legend class="label-caps text-ink-muted">{{ i18n.t('photo.category') }}</legend>
-            <div class="mt-2 grid grid-cols-2 gap-2">
+            <legend class="w-label">{{ i18n.t('photo.category') }}</legend>
+            <div class="cats mt-1.5">
               @for (c of categories; track c) {
                 <button
                   type="button"
-                  class="flex min-h-14 items-center gap-2 px-3 text-left font-cond text-lg"
-                  [class]="category() === c ? (c === 'ISSUE' ? 'bg-hold text-white' : 'bg-charcoal text-white') : 'bg-stock ring-2 ring-inset ring-charcoal'"
+                  class="cat"
+                  [class.is-bad]="c === 'ISSUE'"
                   [attr.aria-pressed]="category() === c"
                   (click)="category.set(c)"
                 >
-                  <aon-icon [name]="icon[c]" [size]="20" [stroke]="2.5" />{{ i18n.t(catKey(c)) }}
+                  <aon-icon [name]="icon[c]" [size]="17" [stroke]="2" />{{ i18n.t(catKey(c)) }}
                 </button>
               }
             </div>
           </fieldset>
 
           <label class="block">
-            <span class="label-caps text-ink-muted">{{ i18n.t('photo.caption') }}</span>
+            <span class="w-label">{{ i18n.t('photo.caption') }}</span>
             <input
               type="text"
               maxlength="280"
-              class="mt-1 block min-h-14 w-full border-2 border-charcoal bg-stock px-4 text-lg font-semibold outline-none placeholder:font-normal placeholder:text-ink-muted focus:ring-4 focus:ring-gold"
+              class="w-field"
               [placeholder]="i18n.t('photo.captionPlaceholder')"
               [value]="caption()"
               (input)="caption.set($any($event.target).value)"
@@ -139,57 +139,97 @@ type Phase = 'DECODING' | 'READY' | 'FAILED' | 'SAVING';
           <div class="grid gap-3" role="group" [attr.aria-label]="i18n.t('photo.title')">
             <label class="flex cursor-pointer items-start gap-3">
               <input type="checkbox" class="aon-check" [checked]="check1()" (change)="check1.set($any($event.target).checked)" />
-              <span class="pt-0.5 font-semibold leading-snug">{{ i18n.t('photo.check1') }}</span>
+              <span class="leading-snug">{{ i18n.t('photo.check1') }}</span>
             </label>
             <label class="flex cursor-pointer items-start gap-3">
               <input type="checkbox" class="aon-check" [checked]="check2()" (change)="check2.set($any($event.target).checked)" />
-              <span class="pt-0.5 font-semibold leading-snug">{{ i18n.t('photo.check2') }}</span>
+              <span class="leading-snug">{{ i18n.t('photo.check2') }}</span>
             </label>
             @if (showConfirmError()) {
-              <p class="flex items-center gap-2 font-semibold text-hold-ink" role="alert"><aon-icon name="alert" [size]="18" />{{ i18n.t('photo.confirmRequired') }}</p>
+              <p class="w-alert" role="alert"><aon-icon name="alert" [size]="18" />{{ i18n.t('photo.confirmRequired') }}</p>
             }
           </div>
 
           <div class="grid gap-2">
             <button
               type="button"
-              class="flex min-h-[4.5rem] items-center justify-between bg-gold px-6 font-cond text-[1.6rem] text-ink disabled:opacity-50"
+              class="w-btn w-btn-gold"
               [disabled]="phase() === 'SAVING'"
               (click)="save(false)"
             >
-              {{ phase() === 'SAVING' ? i18n.t('photo.processing') : i18n.t('photo.save') }}<aon-icon name="check" [size]="28" [stroke]="3" />
+              <aon-icon name="check" [size]="18" [stroke]="2.25" />{{ phase() === 'SAVING' ? i18n.t('photo.processing') : i18n.t('photo.save') }}
             </button>
-            <div class="grid grid-cols-2 gap-2">
+            <div class="w-pair">
               <button
                 type="button"
-                class="flex min-h-14 items-center justify-center gap-2 bg-charcoal font-cond text-lg text-white disabled:opacity-50"
+                class="w-btn w-btn-dark"
                 [disabled]="phase() === 'SAVING'"
                 (click)="save(true)"
               >
-                <aon-icon name="camera" [size]="20" />{{ i18n.t('photo.saveAnother') }}
+                <aon-icon name="camera" [size]="18" />{{ i18n.t('photo.saveAnother') }}
               </button>
               <button
                 type="button"
-                class="flex min-h-14 items-center justify-center gap-2 bg-stock font-cond text-lg ring-2 ring-inset ring-charcoal disabled:opacity-50"
+                class="w-btn w-btn-line"
                 [disabled]="phase() === 'SAVING'"
                 (click)="retake.emit()"
               >
-                <aon-icon name="retry" [size]="20" />{{ i18n.t('photo.retake') }}
+                <aon-icon name="retry" [size]="18" />{{ i18n.t('photo.retake') }}
               </button>
             </div>
-            <p class="mt-1 flex items-start gap-2 text-sm font-semibold text-ink-muted">
-              <aon-icon name="shield" [size]="16" class="mt-0.5" />{{ i18n.t('photo.disclaimer') }}
+            <p class="w-small w-muted mt-1 flex items-start gap-1.5">
+              <aon-icon name="shield" [size]="15" class="mt-0.5" />{{ i18n.t('photo.disclaimer') }}
             </p>
           </div>
         </div>
       } @else if (phase() === 'FAILED') {
         <div class="grid gap-2 px-4 py-4">
-          <button type="button" class="flex min-h-16 items-center justify-center gap-2 bg-gold font-cond text-xl text-ink" (click)="retake.emit()">
-            <aon-icon name="camera" [size]="22" />{{ i18n.t('photo.retake') }}
+          <button type="button" class="w-btn w-btn-gold" (click)="retake.emit()">
+            <aon-icon name="camera" [size]="18" />{{ i18n.t('photo.retake') }}
           </button>
         </div>
       }
     </div>
+  `,
+  styles: `
+    :host {
+      font-family: var(--font-ui);
+    }
+    .panel {
+      border-radius: 1rem 1rem 0 0;
+      background: var(--color-panel);
+    }
+    .cats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.4rem;
+    }
+    .cat {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      min-height: 2.85rem;
+      padding: 0 0.7rem;
+      border: 1px solid var(--color-line-strong);
+      border-radius: 0.6rem;
+      background: #fff;
+      font-size: 0.93rem;
+      font-weight: 600;
+      text-align: left;
+    }
+    .cat[aria-pressed='true'] {
+      border-color: var(--color-gold);
+      background: var(--color-gold-fill);
+      box-shadow: inset 0 0 0 1px var(--color-gold);
+    }
+    .cat.is-bad {
+      color: var(--color-bad);
+    }
+    .cat.is-bad[aria-pressed='true'] {
+      border-color: var(--color-bad);
+      background: var(--color-bad-tint);
+      box-shadow: inset 0 0 0 1px var(--color-bad);
+    }
   `,
 })
 export class PhotoReviewComponent {

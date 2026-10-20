@@ -15,7 +15,7 @@ const STYLE: Readonly<Record<DailySummaryStatus, { readonly cls: string; readonl
   selector: 'aon-report-status',
   imports: [IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'inline-flex shrink-0', '[class.tag-outline]': "status() === 'DRAFT'" },
+  host: { class: 'inline-flex shrink-0', '[class.tag-outline]': "status() === 'DRAFT'", '[attr.data-s]': 'status()' },
   template: `
     <span class="tag-sm tag-shape-sm inline-flex min-h-8 items-center gap-1.5 whitespace-nowrap py-1 pr-2.5 label-caps leading-none" [class]="style().cls">
       <span class="tag-eyelet"></span>

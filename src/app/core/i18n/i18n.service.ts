@@ -27,6 +27,8 @@ export class I18nService {
   private readonly dateFmt = computed(
     () => new Intl.DateTimeFormat(this.locale(), { weekday: 'short', day: 'numeric', month: 'numeric', year: 'numeric' }),
   );
+  private readonly dateDayFmt = computed(() => new Intl.DateTimeFormat(this.locale(), { day: 'numeric', month: 'numeric' }));
+  private readonly dateShortFmt = computed(() => new Intl.DateTimeFormat(this.locale(), { day: 'numeric', month: 'numeric', year: 'numeric' }));
   private readonly dateLongFmt = computed(
     () => new Intl.DateTimeFormat(this.locale(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
   );
@@ -83,6 +85,18 @@ export class I18nService {
   date(isoOrMs: string | number): string {
     const d = typeof isoOrMs === 'number' ? new Date(isoOrMs) : new Date(`${isoOrMs}T12:00:00`);
     return Number.isNaN(d.getTime()) ? '—' : this.dateFmt().format(d);
+  }
+
+  /** Day and month only, for a date the reader already places in the year: "12. 10.". */
+  dateDay(isoOrMs: string | number): string {
+    const d = typeof isoOrMs === 'number' ? new Date(isoOrMs) : new Date(`${isoOrMs}T12:00:00`);
+    return Number.isNaN(d.getTime()) ? '—' : this.dateDayFmt().format(d);
+  }
+
+  /** Date without the weekday, for dense tables: "15. 10. 2026". */
+  dateShort(isoOrMs: string | number): string {
+    const d = typeof isoOrMs === 'number' ? new Date(isoOrMs) : new Date(`${isoOrMs}T12:00:00`);
+    return Number.isNaN(d.getTime()) ? '—' : this.dateShortFmt().format(d);
   }
 
   dateLong(isoOrMs: string | number): string {

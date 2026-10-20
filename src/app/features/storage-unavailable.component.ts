@@ -8,17 +8,17 @@ import { LogoComponent } from '../shared/ui/logo.component';
   imports: [IconComponent, LogoComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <main class="grid min-h-dvh place-items-center bg-charcoal px-4 py-10 text-white">
+    <main class="grid min-h-dvh place-items-center bg-[var(--color-rail)] px-4 py-10 text-[var(--color-rail-text)]">
       <div class="w-full max-w-lg">
-        <aon-logo [size]="2.5" />
-        <div class="mt-8 border-2 border-hold bg-stock p-6 text-ink">
-          <aon-icon name="alert" [size]="36" class="text-hold" />
-          <h1 class="mt-3 font-cond text-3xl leading-tight">{{ i18n.t('storage.title') }}</h1>
-          <p class="mt-3 text-lg leading-relaxed">{{ i18n.t('storage.body') }}</p>
+        <aon-logo [size]="1.45" />
+        <div class="mt-6 rounded-xl bg-white p-6 text-ink shadow-[0_16px_40px_-16px_rgb(0_0_0/0.5)]">
+          <aon-icon name="alert" [size]="24" class="text-[var(--color-bad)]" />
+          <h1 class="mt-3 text-[clamp(1.3rem,1.15rem+0.6vw,1.6rem)] font-semibold leading-tight tracking-tight">{{ i18n.t('storage.title') }}</h1>
+          <p class="mt-2 leading-relaxed">{{ i18n.t('storage.body') }}</p>
           @if (detail()) {
             <p class="mt-3 text-sm text-ink-muted">{{ i18n.t('storage.detail', { detail: detail() ?? '' }) }}</p>
           }
-          <button type="button" class="mt-6 min-h-14 w-full bg-charcoal px-5 font-cond text-xl text-white" (click)="reload()">
+          <button type="button" class="mt-5 min-h-12 w-full rounded-lg bg-gold px-5 font-semibold text-charcoal" (click)="reload()">
             {{ i18n.t('common.retry') }}
           </button>
         </div>

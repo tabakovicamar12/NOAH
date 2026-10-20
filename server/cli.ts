@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline/promises';
+import { ROLES } from '../src/app/core/models/domain.models';
 import { hashPassword } from './auth';
 import { loadConfig } from './config';
 import { getDb, type Db } from './db';
 import { loadDotEnv } from './env-file';
 import { MIGRATIONS, migrate } from './migrations';
 import { seedDemo } from './seed-demo';
+import { createPhotoStore } from './storage';
 
 /**
  * Administration from the command line. Accounts, projects and objects are created here (or directly in
@@ -13,16 +15,20 @@ import { seedDemo } from './seed-demo';
  *
  *   npm run cli -- migrate
  *   npm run cli -- sql                       print all migrations for the Supabase SQL editor
- *   npm run cli -- create-user --username vodja --name "Maja Vidic" --role MANAGER [--projects]
+ *   npm run cli -- create-user --username admin --name "Ana Admin" --role ADMIN
+ *   npm run cli -- create-user --username vodja --name "Maja Vidic" --role MANAGER
+ *   npm run cli -- create-user --username delovodja --name "Rok Kralj" --role FOREMAN
  *   npm run cli -- create-user --username luka --name "Luka Kranjc" --role WORKER --crew "Ekipa A"
  *   npm run cli -- set-password --username luka
  *   npm run cli -- deactivate-user --username luka
- *   npm run cli -- grant-projects --username vodja    manager may add projects and objects in the app
- *   npm run cli -- revoke-projects --username vodja
+ *   npm run cli -- assign-project --username vodja --project HN      manager leads project HN
+ *   npm run cli -- assign-site --username delovodja --site HN-1      foreman leads object HN-1
  *   npm run cli -- create-project --code HN --name "Hiša Novak"
  *   npm run cli -- create-site --project HN --code HN-1 --name "Maribor, Tezno" --city Maribor
  *   npm run cli -- list
  *   npm run cli -- seed-demo                 synthetic demo data (never on a production database)
+ *   npm run cli -- purge-photos --dry-run    photos older than PHOTO_RETENTION_DAYS (or --days N): count only
+ *   npm run cli -- purge-photos              …and delete them (files and records); run on a schedule
  */
 
 type Args = Record<string, string | true>;
@@ -85,16 +91,14 @@ async function run(db: Db, cmd: string, args: Args): Promise<void> {
       const username = need(args, 'username').toLowerCase();
       if (!/^[a-z0-9._-]{3,40}$/.test(username)) throw new Error('Username: 3–40 characters a-z, 0-9, . _ -');
       const role = need(args, 'role').toUpperCase();
-      if (role !== 'WORKER' && role !== 'MANAGER') throw new Error('--role must be WORKER or MANAGER');
-      const canManageProjects = args['projects'] === true;
-      if (canManageProjects && role !== 'MANAGER') throw new Error('--projects is only for managers');
+      if (!(ROLES as readonly string[]).includes(role)) throw new Error(`--role must be one of ${ROLES.join(', ')}`);
       const pw = await askPassword(`Password for ${username} (min 10 characters): `);
       checkPassword(pw);
       await db.query(
-        `insert into users (id, username, display_name, role, crew, password_hash, active, created_at, can_manage_projects) values ($1, $2, $3, $4, $5, $6, true, $7, $8)`,
-        [`u-${randomUUID()}`, username, need(args, 'name'), role, typeof args['crew'] === 'string' ? args['crew'] : null, await hashPassword(pw), Date.now(), canManageProjects],
+        `insert into users (id, username, display_name, role, crew, password_hash, active, created_at) values ($1, $2, $3, $4, $5, $6, true, $7)`,
+        [`u-${randomUUID()}`, username, need(args, 'name'), role, typeof args['crew'] === 'string' ? args['crew'] : null, await hashPassword(pw), Date.now()],
       );
-      console.log(`Created ${role.toLowerCase()} ${username}${canManageProjects ? ' (may add projects)' : ''}.`);
+      console.log(`Created ${role.toLowerCase()} ${username}.`);
       return;
     }
     case 'set-password': {
@@ -110,15 +114,24 @@ async function run(db: Db, cmd: string, args: Args): Promise<void> {
       console.log(rows.length ? 'Deactivated. Their records are kept.' : 'No such user.');
       return;
     }
-    case 'grant-projects':
-    case 'revoke-projects': {
+    case 'assign-project': {
       await migrate(db);
-      const grant = cmd === 'grant-projects';
-      const rows = await db.query(`update users set can_manage_projects = $2 where username = $1 and role = 'MANAGER' returning id`, [
-        need(args, 'username').toLowerCase(),
-        grant,
-      ]);
-      console.log(rows.length ? (grant ? 'Granted: may add projects and objects (log in again to see it).' : 'Revoked.') : 'No such manager.');
+      const user = (await db.query(`select id from users where username = $1 and role = 'MANAGER'`, [need(args, 'username').toLowerCase()]))[0];
+      if (!user) throw new Error('No such manager.');
+      const project = (await db.query(`select id from projects where code = $1`, [need(args, 'project').toUpperCase()]))[0];
+      if (!project) throw new Error('No such project.');
+      await db.query(`insert into project_managers (project_id, user_id) values ($1, $2) on conflict do nothing`, [String(project['id']), String(user['id'])]);
+      console.log('Assigned.');
+      return;
+    }
+    case 'assign-site': {
+      await migrate(db);
+      const user = (await db.query(`select id from users where username = $1 and role = 'FOREMAN'`, [need(args, 'username').toLowerCase()]))[0];
+      if (!user) throw new Error('No such foreman.');
+      const site = (await db.query(`select id from sites where code = $1 and active`, [need(args, 'site').toUpperCase()]))[0];
+      if (!site) throw new Error('No such object.');
+      await db.query(`insert into site_foremen (site_id, user_id) values ($1, $2) on conflict do nothing`, [String(site['id']), String(user['id'])]);
+      console.log('Assigned.');
       return;
     }
     case 'create-project': {
@@ -145,7 +158,7 @@ async function run(db: Db, cmd: string, args: Args): Promise<void> {
     }
     case 'list': {
       await migrate(db);
-      const users = await db.query(`select username, display_name, role, crew, active, can_manage_projects as projects from users order by role, display_name`);
+      const users = await db.query(`select username, display_name, role, crew, active from users order by role, display_name`);
       const projects = await db.query(`select p.code, p.name, count(s.id)::int as objects from projects p left join sites s on s.project_id = p.id group by p.id order by p.code`);
       console.table(users);
       console.table(projects);
@@ -155,11 +168,32 @@ async function run(db: Db, cmd: string, args: Args): Promise<void> {
       if (process.env['NODE_ENV'] === 'production' && !args['force']) throw new Error('Refusing to seed demo data in production (add --force if you really mean it).');
       await migrate(db);
       await seedDemo(db);
-      console.log('Demo data loaded. Accounts: vodja / vodja-demo-2026, delavec / delavec-demo-2026 (others: demo-geslo-2026).');
+      console.log('Demo data loaded. Accounts: admin / admin-demo-2026, vodja / vodja-demo-2026, delovodja / delovodja-demo-2026, delavec / delavec-demo-2026 (other workers: demo-geslo-2026).');
+      return;
+    }
+    case 'purge-photos': {
+      // Storage limitation (GDPR Art. 5(1)(e)): photos are kept only as long as the employer decided.
+      // Working-time records are never touched here; the law sets how long those are kept.
+      await migrate(db);
+      const days = typeof args['days'] === 'string' ? Number(args['days']) : loadConfig().org.photoRetentionDays;
+      if (!days || !Number.isInteger(days) || days < 1) throw new Error('Set PHOTO_RETENTION_DAYS or pass --days N.');
+      const cutoff = Date.now() - days * 86_400_000;
+      const rows = await db.query<{ id: string; storage_key: string }>(`select id, storage_key from photos where created_at < $1`, [cutoff]);
+      console.log(`${rows.length} photo(s) older than ${days} days.`);
+      if (args['dry-run'] || rows.length === 0) return;
+      const store = createPhotoStore(loadConfig());
+      for (let i = 0; i < rows.length; i += 200) {
+        const batch = rows.slice(i, i + 200);
+        await store.remove(batch.map((r) => r.storage_key));
+        await db.query(`delete from photos where id = any($1::text[])`, [batch.map((r) => r.id)]);
+      }
+      console.log('Deleted.');
       return;
     }
     default:
-      console.log('Commands: migrate | sql | create-user | set-password | deactivate-user | grant-projects | revoke-projects | create-project | create-site | list | seed-demo');
+      console.log(
+        'Commands: migrate | sql | create-user | set-password | deactivate-user | assign-project | assign-site | create-project | create-site | list | seed-demo | purge-photos',
+      );
   }
 }
 

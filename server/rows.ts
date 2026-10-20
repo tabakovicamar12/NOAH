@@ -7,11 +7,13 @@ import type {
   Material,
   PhotoMeta,
   Project,
+  Role,
   Site,
   TimeEntry,
   User,
   WorkOrder,
 } from '../src/app/core/models/domain.models';
+import { ROLES } from '../src/app/core/models/domain.models';
 
 /** Row → domain mappers. Drivers return bigint/numeric as strings or BigInt, so numbers are coerced here. */
 
@@ -39,13 +41,17 @@ export interface UserRow extends User {
   readonly active: boolean;
 }
 
+/** Unknown values fall back to the least privileged role. */
+export function toRole(v: unknown): Role {
+  return (ROLES as readonly string[]).includes(String(v)) ? (String(v) as Role) : 'WORKER';
+}
+
 export function toUser(r: Row): UserRow {
   return {
     id: str(r['id']),
     displayName: str(r['display_name']),
-    role: str(r['role']) === 'MANAGER' ? 'MANAGER' : 'WORKER',
+    role: toRole(r['role']),
     ...(r['crew'] ? { crew: str(r['crew']) } : {}),
-    ...(r['can_manage_projects'] === true ? { canManageProjects: true } : {}),
     username: str(r['username']),
     passwordHash: str(r['password_hash']),
     active: r['active'] !== false,
@@ -58,7 +64,6 @@ export function publicUser(u: UserRow): User {
     displayName: u.displayName,
     role: u.role,
     ...(u.crew ? { crew: u.crew } : {}),
-    ...(u.canManageProjects ? { canManageProjects: true } : {}),
   };
 }
 
@@ -137,6 +142,7 @@ export function toTimeEntry(r: Row): TimeEntry {
     userId: str(r['user_id']),
     kind: str(r['kind']) === 'ORDER' ? 'ORDER' : 'SHIFT',
     workOrderId: strOrNull(r['work_order_id']),
+    siteId: strOrNull(r['site_id']),
     date: str(r['date']) as IsoDate,
     startedAt: num(r['started_at']),
     endedAt: numOrNull(r['ended_at']),
@@ -181,6 +187,7 @@ export function toSummary(r: Row): DailySummary {
     date: str(r['date']) as IsoDate,
     arrivalAt: numOrNull(r['arrival_at']),
     departureAt: numOrNull(r['departure_at']),
+    siteName: strOrNull(r['site_name']),
     shiftMinutes: num(r['shift_minutes']),
     orderMinutes: num(r['order_minutes']),
     lines: json(r['lines'], []),

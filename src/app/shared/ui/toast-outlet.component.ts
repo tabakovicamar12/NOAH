@@ -27,18 +27,18 @@ import { IconComponent } from './icon.component';
     </div>
     @for (t of toast.toasts(); track t.id) {
       <div
-        class="toast-in pointer-events-auto flex w-full max-w-md items-start gap-3 border-2 border-charcoal px-4 py-3 text-base font-semibold shadow-[0_10px_28px_-10px_rgb(0_0_0/0.45)]"
-        [class]="t.kind === 'error' ? 'bg-hold text-white border-hold' : t.kind === 'success' ? 'bg-charcoal text-white' : 'bg-stock text-ink'"
+        class="toast-in pointer-events-auto flex w-full max-w-md items-start gap-3 rounded-xl px-4 py-3 text-[0.95rem] font-medium shadow-[0_16px_40px_-16px_rgb(20_20_20/0.45)]"
+        [class]="t.kind === 'error' ? 'bg-[var(--color-bad)] text-white' : t.kind === 'success' ? 'bg-[var(--color-rail)] text-white' : 'border border-[var(--color-line)] bg-white text-ink'"
         aria-hidden="true"
       >
         <aon-icon
           [name]="t.kind === 'error' ? 'alert' : t.kind === 'success' ? 'circle-check' : 'note'"
-          [size]="22"
-          [class]="t.kind === 'success' ? 'text-gold' : ''"
+          [size]="19"
+          [class]="t.kind === 'success' ? 'mt-0.5 text-gold' : 'mt-0.5'"
         />
         <p class="flex-1 leading-snug">{{ t.text }}</p>
-        <button type="button" class="-m-2 grid size-11 place-items-center" (click)="toast.dismiss(t.id)" tabindex="-1">
-          <aon-icon name="x" [size]="20" />
+        <button type="button" class="-m-2 grid size-11 place-items-center rounded-lg opacity-70 hover:opacity-100" (click)="toast.dismiss(t.id)" tabindex="-1">
+          <aon-icon name="x" [size]="18" />
         </button>
       </div>
     }

@@ -2,16 +2,25 @@ import { HttpErrorResponse, HttpResponse, type HttpInterceptorFn, type HttpReque
 import { from, type Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import type {
+  AdminUser,
+  AdminUserCreate,
+  AdminUserUpdate,
+  AssignmentUpdate,
   ConsentRequest,
+  HoursResponse,
   LoginRequest,
   LoginResponse,
   ManagerDirectoryResponse,
   ManagerOverviewResponse,
   ManagerProjectsResponse,
   OrderOverview,
+  OrgInfo,
   PhotoView,
+  PasswordReset,
   ProjectCreate,
+  ProjectUpdate,
   SiteCreate,
+  SiteUpdate,
   SummaryDetailResponse,
   SummaryReviewRequest,
   WorkOrderDetailResponse,
@@ -20,7 +29,11 @@ import type {
   WorkerOverview,
 } from '../core/models/api.models';
 import {
+  CONSENT_VERSION,
   QUANTITY_UNITS,
+  ROLES,
+  canApproveReports,
+  isDeskRole,
   type DailySummary,
   type IsoDate,
   type LogEntry,
@@ -32,8 +45,9 @@ import {
   type WorkOrder,
   type WorkOrderStatus,
 } from '../core/models/domain.models';
-import { isIsoDate, minutesBetween, toIsoDate } from '../core/util/util';
-import { MockServerDb, type MockOrder, type MockPhoto, type MockUser } from './mock-db';
+import { compareCodes, isIsoDate, minutesBetween, toIsoDate } from '../core/util/util';
+import { isMonth, monthOf, monthWindow } from '../core/worktime/worktime';
+import { MockServerDb, type Archivable, type MockOrder, type MockPhoto, type MockUser } from './mock-db';
 import { crewOf, ensureSeeded, siteLabel } from './mock-seed';
 
 /**
@@ -88,7 +102,6 @@ function publicUser(u: MockUser): User {
     displayName: u.displayName,
     role: u.role,
     ...(u.crew ? { crew: u.crew } : {}),
-    ...(u.canManageProjects ? { canManageProjects: true } : {}),
   };
 }
 
@@ -104,7 +117,7 @@ async function authenticate(db: MockServerDb, req: HttpRequest<unknown>): Promis
   const [, userId, exp] = match;
   if (!userId || Number(exp) < Date.now()) throw new MockHttpError(401, 'Token expired');
   const user = await db.users.get(userId);
-  if (!user) throw new MockHttpError(401, 'Unknown user');
+  if (!user || user.active === false) throw new MockHttpError(401, 'Unknown user');
   return user;
 }
 
@@ -112,8 +125,46 @@ function requireRole(user: MockUser, role: User['role']): void {
   if (user.role !== role) throw new MockHttpError(403, 'Forbidden for this role');
 }
 
-function requireProjectAdmin(user: MockUser): void {
-  if (user.role !== 'MANAGER' || !user.canManageProjects) throw new MockHttpError(403, 'Forbidden for this role');
+function requireDesk(user: MockUser): void {
+  if (!isDeskRole(user.role)) throw new MockHttpError(403, 'Forbidden for this role');
+}
+
+function requireAdmin(user: MockUser): void {
+  if (user.role !== 'ADMIN') throw new MockHttpError(403, 'Forbidden for this role');
+}
+
+const isActive = (x: object): boolean => (x as Archivable).active !== false;
+
+/** Same rule as the server: administrator all, manager the objects of their projects, foreman their objects. */
+async function scopeSites(db: MockServerDb, me: MockUser): Promise<ReadonlySet<string> | 'ALL'> {
+  if (me.role === 'ADMIN') return 'ALL';
+  const sites = await db.sites.toArray();
+  if (me.role === 'MANAGER') return new Set(sites.filter((s) => (me.projectIds ?? []).includes(s.projectId)).map((s) => s.id));
+  if (me.role === 'FOREMAN') return new Set(me.siteIds ?? []);
+  return new Set();
+}
+const inScope = (scope: ReadonlySet<string> | 'ALL', siteId: string): boolean => scope === 'ALL' || scope.has(siteId);
+async function scopeProjects(db: MockServerDb, me: MockUser, scope: ReadonlySet<string> | 'ALL'): Promise<ReadonlySet<string> | 'ALL'> {
+  if (scope === 'ALL') return 'ALL';
+  const ids = new Set((await db.sites.toArray()).filter((s) => scope.has(s.id)).map((s) => s.projectId));
+  for (const p of me.projectIds ?? []) ids.add(p);
+  return ids;
+}
+
+function adminUser(u: MockUser, projects: readonly (Project & Archivable)[], sites: readonly (Site & Archivable)[], orders: readonly MockOrder[]): AdminUser {
+  const led = sites.filter((s) => (u.siteIds ?? []).includes(s.id) && isActive(s));
+  const projectIds = u.role === 'MANAGER' ? (u.projectIds ?? []) : [...new Set(led.map((s) => s.projectId))];
+  return {
+    id: u.id,
+    username: u.username,
+    displayName: u.displayName,
+    role: u.role,
+    crew: u.crew ?? null,
+    active: u.active !== false,
+    projects: projects.filter((p) => projectIds.includes(p.id) && isActive(p)).map((p) => ({ id: p.id, code: p.code, name: p.name })),
+    sites: u.role === 'FOREMAN' ? led.map((s) => ({ id: s.id, code: s.code, name: s.name })) : [],
+    openOrders: orders.filter((o) => o.published && OPEN_STATUSES.includes(o.status) && o.crewIds.includes(u.id)).length,
+  };
 }
 
 function requireCode(value: unknown): string {
@@ -180,7 +231,7 @@ async function nextOrderCode(db: MockServerDb): Promise<string> {
     .map((o) => o.code)
     .filter((c): c is string => !!c && c.startsWith(prefix))
     .reduce((m, c) => Math.max(m, Number(c.slice(prefix.length)) || 0), 0);
-  return `${prefix}${String(max + 1).padStart(5, '0')}`;
+  return `${prefix}${String(max + 1).padStart(3, '0')}`;
 }
 
 async function upsertOrder(db: MockServerDb, me: MockUser, id: string, body: WorkOrderUpsert): Promise<void> {
@@ -252,11 +303,24 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
     const username = requireString(body.username, 'username').trim().toLowerCase();
     const password = requireString(body.password, 'password');
     const user = await db.users.where('username').equals(username).first();
-    if (!user || user.password !== password) throw new MockHttpError(401, 'INVALID_CREDENTIALS');
-    if (user.role !== body.role) throw new MockHttpError(403, 'ROLE_MISMATCH');
+    if (!user || user.password !== password || user.active === false) throw new MockHttpError(401, 'INVALID_CREDENTIALS');
+    if ((body.role === 'WORKER') !== (user.role === 'WORKER')) throw new MockHttpError(403, 'ROLE_MISMATCH');
     const expiresAt = Date.now() + TOKEN_TTL_MS;
-    const res: LoginResponse = { token: `mock.${user.id}.${expiresAt}`, expiresAt, user: publicUser(user) };
+    const consents = (await db.consents.where('userId').equals(user.id).toArray()).sort((a, b) => b.acceptedAt - a.acceptedAt);
+    const pick = (c: { version: string; acceptedAt: number } | undefined): { version: string; acceptedAt: number } | null =>
+      c ? { version: c.version, acceptedAt: c.acceptedAt } : null;
+    const res: LoginResponse = {
+      token: `mock.${user.id}.${expiresAt}`,
+      expiresAt,
+      user: publicUser(user),
+      consents: { notice: pick(consents.find((c) => c.version === CONSENT_VERSION)), voice: pick(consents.find((c) => c.version.startsWith('voice-'))) },
+    };
     return res;
+  }
+
+  if (method === 'GET' && path === '/org') {
+    const org: OrgInfo = { name: null, address: null, taxId: null, privacyContact: null, dpo: null, photoRetentionDays: null };
+    return org;
   }
 
   const me = await authenticate(db, req);
@@ -265,7 +329,8 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
   if (method === 'GET' && path === '/worker/orders') {
     requireRole(me, 'WORKER');
     const orders = await db.orders.where('crewIds').equals(me.id).toArray();
-    return { orders: orders.filter((o) => o.published).map(publicOrder), serverTime: Date.now() };
+    const sites = (await db.sites.toArray()).filter((x) => (x as Site & Archivable).active !== false);
+    return { orders: orders.filter((o) => o.published).map(publicOrder), sites, serverTime: Date.now() };
   }
 
   if (method === 'GET' && path === '/worker/daily-summary') {
@@ -273,6 +338,26 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
     const date = url.searchParams.get('date') ?? '';
     if (!isIsoDate(date)) throw new MockHttpError(400, 'date must be YYYY-MM-DD');
     return (await db.summaries.get(`sum-${me.id}-${date}`)) ?? null;
+  }
+
+  if (method === 'GET' && path === '/worker/day') {
+    requireRole(me, 'WORKER');
+    const date = url.searchParams.get('date') ?? '';
+    const from = Number(url.searchParams.get('from'));
+    if (!isIsoDate(date) || !Number.isFinite(from)) throw new MockHttpError(400, 'date and from required');
+    const [entries, logs] = await Promise.all([
+      db.timeEntries.where('userId').equals(me.id).toArray(),
+      db.logs.where('userId').equals(me.id).toArray(),
+    ]);
+    return {
+      timeEntries: entries.filter((e) => e.date === date || e.endedAt === null).sort((a, b) => a.startedAt - b.startedAt),
+      logs: logs.filter((l) => l.createdAt >= from && l.createdAt < from + 26 * 3_600_000).sort((a, b) => a.createdAt - b.createdAt),
+    };
+  }
+
+  if (method === 'GET' && path === '/worker/hours') {
+    requireRole(me, 'WORKER');
+    return hours(db, monthParam(url), [me.id]);
   }
 
   if (method === 'POST' && path === '/consents') {
@@ -330,7 +415,9 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
       if (!target) throw new MockHttpError(404, 'Work order not found');
       if (body.kind === 'QUANTITY') {
         const q = requireNumber(body.quantity, 'quantity');
-        if (q <= 0) throw new MockHttpError(400, 'quantity must be positive');
+        if (q === 0) throw new MockHttpError(400, 'quantity must not be zero');
+        if (q < 0 && !(typeof body.text === 'string' && body.text.trim())) throw new MockHttpError(400, 'A correction needs a reason');
+        if (target.doneQty + q < 0) throw new MockHttpError(409, 'QUANTITY_BELOW_ZERO');
         await db.orders.put({ ...target, doneQty: Math.round((target.doneQty + q) * 100) / 100, updatedAt: Date.now() });
       } else {
         requireString(body.text, 'text');
@@ -366,13 +453,18 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
 
   // ---- manager
   if (method === 'GET' && path === '/manager/directory') {
-    requireRole(me, 'MANAGER');
-    const [projects, sites, users, orders] = await Promise.all([
+    requireDesk(me);
+    const scope = await scopeSites(db, me);
+    const projectScope = await scopeProjects(db, me, scope);
+    const [allProjects, allSites, allUsers, orders] = await Promise.all([
       db.projects.toArray(),
       db.sites.toArray(),
       db.users.where('role').equals('WORKER').toArray(),
       db.orders.toArray(),
     ]);
+    const projects = allProjects.filter((p) => isActive(p) && (projectScope === 'ALL' || projectScope.has(p.id)));
+    const sites = allSites.filter((s) => isActive(s) && inScope(scope, s.id));
+    const users = allUsers.filter((u) => u.active !== false);
     const res: ManagerDirectoryResponse = {
       projects,
       sites,
@@ -388,36 +480,81 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
   }
 
   if (method === 'PUT' && segments[0] === 'manager' && segments[1] === 'work-orders' && segments[2]) {
-    requireRole(me, 'MANAGER');
+    requireDesk(me);
     const body = bodyAs<WorkOrderUpsert>(req);
     const id = segments[2];
+    const scope = await scopeSites(db, me);
+    const existing = await db.orders.get(id);
+    if (!inScope(scope, String(body.siteId)) || (existing && !inScope(scope, existing.siteId))) throw new MockHttpError(403, 'OUT_OF_SCOPE');
     return withIdempotency(db, req, () => upsertOrder(db, me, id, body));
   }
 
   if (method === 'GET' && path === '/manager/overview') {
-    requireRole(me, 'MANAGER');
+    requireDesk(me);
     const dateParam = url.searchParams.get('date') ?? toIsoDate();
     if (!isIsoDate(dateParam)) throw new MockHttpError(400, 'date must be YYYY-MM-DD');
-    return overview(db, dateParam);
+    const scope = await scopeSites(db, me);
+    const full = await overview(db, dateParam);
+    if (scope === 'ALL') return full;
+    const orders = full.orders.filter((o) => inScope(scope, o.order.siteId));
+    const visible = new Set(orders.flatMap((o) => o.order.crew.map((c) => c.id)));
+    const projectScope = await scopeProjects(db, me, scope);
+    const scoped: ManagerOverviewResponse = {
+      ...full,
+      projects: full.projects.filter((p) => projectScope === 'ALL' || projectScope.has(p.id)),
+      sites: full.sites.filter((s) => inScope(scope, s.id)),
+      orders,
+      workers: full.workers.filter((w) => visible.has(w.user.id)),
+      summaries: full.summaries.filter((s) => visible.has(s.userId)),
+    };
+    return scoped;
+  }
+
+  if (method === 'GET' && path === '/manager/hours') {
+    requireDesk(me);
+    const month = monthParam(url);
+    const scope = await scopeSites(db, me);
+    if (scope === 'ALL') return hours(db, month, null);
+    const { from, to } = monthWindow(month);
+    const orders = (await db.orders.toArray()).filter((o) => inScope(scope, o.siteId));
+    const ids = new Set(orders.flatMap((o) => o.crewIds));
+    const orderIds = new Set(orders.map((o) => o.id));
+    for (const e of await db.timeEntries.where('date').between(from, to, true, true).toArray()) {
+      if (e.workOrderId && orderIds.has(e.workOrderId)) ids.add(e.userId);
+    }
+    return hours(db, month, [...ids]);
   }
 
   if (method === 'GET' && path === '/manager/projects') {
-    requireRole(me, 'MANAGER');
+    requireDesk(me);
     const now = Date.now();
-    const [projects, sites, orders, entries, logs] = await Promise.all([
+    const scope = await scopeSites(db, me);
+    const projectScope = await scopeProjects(db, me, scope);
+    const [allProjects, allSites, orders, entries, logs, users] = await Promise.all([
       db.projects.toArray(),
       db.sites.toArray(),
       db.orders.toArray(),
       db.timeEntries.toArray(),
       db.logs.toArray(),
+      db.users.toArray(),
     ]);
+    const projects = allProjects.filter((p) => isActive(p) && (projectScope === 'ALL' || projectScope.has(p.id)));
+    const sites = allSites.filter((s) => isActive(s) && inScope(scope, s.id));
+    const leaders = users.filter((u) => u.active !== false);
+    const member = (u: MockUser): { id: string; displayName: string } => ({ id: u.id, displayName: u.displayName });
     const res: ManagerProjectsResponse = {
       projects: projects.map((project) => ({
         project,
         sites: sites.filter((s) => s.projectId === project.id),
+        managers: leaders.filter((u) => u.role === 'MANAGER' && (u.projectIds ?? []).includes(project.id)).map(member),
+        foremen: Object.fromEntries(
+          sites
+            .filter((s) => s.projectId === project.id)
+            .map((s) => [s.id, leaders.filter((u) => u.role === 'FOREMAN' && (u.siteIds ?? []).includes(s.id)).map(member)]),
+        ),
         orders: orders
-          .filter((o) => o.projectId === project.id)
-          .sort((a, b) => (b.code ?? '').localeCompare(a.code ?? ''))
+          .filter((o) => o.projectId === project.id && inScope(scope, o.siteId))
+          .sort((a, b) => compareCodes(b.code, a.code))
           .map((o) => ({
             id: o.id,
             code: o.code,
@@ -440,41 +577,158 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
   }
 
   if (method === 'POST' && path === '/manager/projects') {
-    requireProjectAdmin(me);
+    requireAdmin(me);
     const body = bodyAs<ProjectCreate>(req);
-    const code = requireCode(body.code);
     const name = requireString(body.name, 'name').trim();
-    if ((await db.projects.toArray()).some((p) => p.code === code)) throw new MockHttpError(409, 'CODE_TAKEN');
+    const all = await db.projects.toArray();
+    let code: string;
+    if (body.code && body.code.trim()) {
+      code = requireCode(body.code);
+    } else {
+      const prefix = `P-${new Date().getFullYear()}-`;
+      const max = all.map((p) => p.code).filter((c) => c.startsWith(prefix)).reduce((m, c) => Math.max(m, Number(c.slice(prefix.length)) || 0), 0);
+      code = `${prefix}${String(max + 1).padStart(3, '0')}`;
+    }
+    if (all.some((p) => p.code === code)) throw new MockHttpError(409, 'CODE_TAKEN');
     const project: Project = { id: `p-${crypto.randomUUID()}`, code, name };
     await db.projects.put(project);
     return project;
   }
 
   if (method === 'POST' && path === '/manager/sites') {
-    requireProjectAdmin(me);
+    requireAdmin(me);
     const body = bodyAs<SiteCreate>(req);
     const project = await db.projects.get(requireString(body.projectId, 'projectId'));
     if (!project) throw new MockHttpError(404, 'Project not found');
-    const code = requireCode(body.code);
+    const siblings = (await db.sites.toArray()).filter((s) => s.projectId === project.id);
+    const code = body.code && body.code.trim() ? requireCode(body.code) : `O-${siblings.length + 1}`;
     const name = requireString(body.name, 'name').trim();
-    if ((await db.sites.toArray()).some((s) => s.projectId === project.id && s.code === code)) throw new MockHttpError(409, 'CODE_TAKEN');
+    if (siblings.some((s) => s.code === code)) throw new MockHttpError(409, 'CODE_TAKEN');
     const site: Site = { id: `s-${crypto.randomUUID()}`, code, projectId: project.id, projectName: project.name, name, city: typeof body.city === 'string' ? body.city.trim() : '' };
     await db.sites.put(site);
     return site;
   }
 
   if (method === 'GET' && segments[0] === 'manager' && segments[1] === 'work-orders' && segments[2]) {
-    requireRole(me, 'MANAGER');
+    requireDesk(me);
+    const order = await db.orders.get(segments[2]);
+    if (order && !inScope(await scopeSites(db, me), order.siteId)) throw new MockHttpError(403, 'OUT_OF_SCOPE');
     return orderDetail(db, segments[2]);
   }
 
   if (method === 'GET' && segments[0] === 'manager' && segments[1] === 'daily-summaries' && segments[2]) {
-    requireRole(me, 'MANAGER');
+    requireDesk(me);
     return summaryDetail(db, segments[2]);
   }
 
+  // ---- administrator
+  if (method === 'GET' && path === '/admin/users') {
+    requireAdmin(me);
+    const [users, projects, sites, orders] = await Promise.all([db.users.toArray(), db.projects.toArray(), db.sites.toArray(), db.orders.toArray()]);
+    const list = users
+      .map((u) => adminUser(u, projects, sites, orders))
+      .sort((a, b) => Number(b.active) - Number(a.active) || a.displayName.localeCompare(b.displayName, 'sl'));
+    return { users: list };
+  }
+
+  if (method === 'POST' && path === '/admin/users') {
+    requireAdmin(me);
+    const body = bodyAs<AdminUserCreate>(req);
+    const username = requireString(body.username, 'username').trim().toLowerCase();
+    if (!/^[a-z0-9._-]{3,40}$/.test(username)) throw new MockHttpError(400, 'INVALID_USERNAME');
+    if (typeof body.password !== 'string' || body.password.length < 10) throw new MockHttpError(400, 'PASSWORD_TOO_SHORT');
+    if (!ROLES.includes(body.role)) throw new MockHttpError(400, 'role invalid');
+    if (await db.users.where('username').equals(username).first()) throw new MockHttpError(409, 'USERNAME_TAKEN');
+    const id = `u-${crypto.randomUUID()}`;
+    const crew = body.crew?.trim();
+    await db.users.put({ id, username, password: body.password, displayName: requireString(body.displayName, 'displayName').trim(), role: body.role, ...(crew ? { crew } : {}) });
+    return { id };
+  }
+
+  if (method === 'PATCH' && segments[0] === 'admin' && segments[1] === 'users' && segments[2] && !segments[3]) {
+    requireAdmin(me);
+    const body = bodyAs<AdminUserUpdate>(req);
+    const user = await db.users.get(segments[2]);
+    if (!user) throw new MockHttpError(404, 'User not found');
+    const role = body.role ?? user.role;
+    if (!ROLES.includes(role)) throw new MockHttpError(400, 'role invalid');
+    const active = body.active ?? user.active !== false;
+    if (user.id === me.id && (role !== user.role || !active)) throw new MockHttpError(409, 'SELF_LOCKOUT');
+    if (user.role === 'ADMIN' && user.active !== false && (role !== 'ADMIN' || !active)) {
+      const others = (await db.users.toArray()).filter((u) => u.role === 'ADMIN' && u.active !== false && u.id !== user.id);
+      if (others.length === 0) throw new MockHttpError(409, 'LAST_ADMIN');
+    }
+    if (user.role === 'WORKER' && role !== 'WORKER') {
+      const open = (await db.orders.where('crewIds').equals(user.id).toArray()).some((o) => o.status !== 'COMPLETED');
+      if (open) throw new MockHttpError(409, 'OPEN_ORDERS');
+    }
+    const crew = body.crew === undefined ? user.crew : body.crew?.trim() || undefined;
+    const { crew: _old, projectIds, siteIds, ...rest } = user;
+    await db.users.put({
+      ...rest,
+      displayName: body.displayName?.trim() || user.displayName,
+      role,
+      active,
+      ...(crew ? { crew } : {}),
+      ...(role === 'MANAGER' && projectIds ? { projectIds } : {}),
+      ...(role === 'FOREMAN' && siteIds ? { siteIds } : {}),
+    });
+    return null;
+  }
+
+  if (method === 'POST' && segments[0] === 'admin' && segments[1] === 'users' && segments[2] && segments[3] === 'password') {
+    requireAdmin(me);
+    const body = bodyAs<PasswordReset>(req);
+    if (typeof body.password !== 'string' || body.password.length < 10) throw new MockHttpError(400, 'PASSWORD_TOO_SHORT');
+    const user = await db.users.get(segments[2]);
+    if (!user) throw new MockHttpError(404, 'User not found');
+    await db.users.put({ ...user, password: body.password });
+    return null;
+  }
+
+  if (method === 'PATCH' && segments[0] === 'admin' && (segments[1] === 'projects' || segments[1] === 'sites') && segments[2] && !segments[3]) {
+    requireAdmin(me);
+    const isProject = segments[1] === 'projects';
+    const body = bodyAs<ProjectUpdate & SiteUpdate>(req);
+    const table = isProject ? db.projects : db.sites;
+    const row = (await table.get(segments[2])) as (Project | Site) & Archivable | undefined;
+    if (!row) throw new MockHttpError(404, 'Not found');
+    if (body.active === false && isActive(row)) {
+      const open = (await db.orders.toArray()).some((o) => (isProject ? o.projectId : o.siteId) === row.id && o.status !== 'COMPLETED');
+      if (open) throw new MockHttpError(409, 'OPEN_ORDERS');
+    }
+    const next = {
+      ...row,
+      ...(body.name?.trim() ? { name: body.name.trim() } : {}),
+      ...(!isProject && body.city !== undefined ? { city: body.city.trim() } : {}),
+      ...(body.active !== undefined ? { active: body.active } : {}),
+    };
+    await (table as typeof db.sites).put(next as Site);
+    return null;
+  }
+
+  if (method === 'PUT' && segments[0] === 'admin' && (segments[1] === 'projects' || segments[1] === 'sites') && segments[2] && (segments[3] === 'managers' || segments[3] === 'foremen')) {
+    requireAdmin(me);
+    const body = bodyAs<AssignmentUpdate>(req);
+    const role = segments[3] === 'managers' ? 'MANAGER' : 'FOREMAN';
+    const key = role === 'MANAGER' ? 'projectIds' : 'siteIds';
+    const target = segments[2];
+    const ids = new Set(Array.isArray(body.userIds) ? body.userIds : []);
+    const users = await db.users.toArray();
+    if ([...ids].some((id) => !users.some((u) => u.id === id && u.role === role && u.active !== false))) {
+      throw new MockHttpError(400, `Every user must be an active ${role.toLowerCase()}`);
+    }
+    for (const u of users.filter((x) => x.role === role)) {
+      const current = new Set(u[key] ?? []);
+      if (ids.has(u.id)) current.add(target);
+      else current.delete(target);
+      await db.users.put({ ...u, [key]: [...current] });
+    }
+    return null;
+  }
+
   if (method === 'POST' && segments[0] === 'daily-summaries' && segments[1] && segments[2] === 'review') {
-    requireRole(me, 'MANAGER');
+    if (!canApproveReports(me.role)) throw new MockHttpError(403, 'Forbidden for this role');
     const body = bodyAs<SummaryReviewRequest>(req);
     const existing = await db.summaries.get(segments[1]);
     if (!existing) throw new MockHttpError(404, 'Summary not found');
@@ -487,6 +741,47 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
   }
 
   throw new MockHttpError(404, `No route for ${method} ${path}`);
+}
+
+function monthParam(url: URL): string {
+  const month = url.searchParams.get('month') ?? toIsoDate().slice(0, 7);
+  if (!isMonth(month)) throw new MockHttpError(400, 'month must be YYYY-MM');
+  return month;
+}
+
+/** Same contract as the server: a month of shifts with the year's run-up, the month's order segments and report states. */
+async function hours(db: MockServerDb, month: string, userIds: readonly string[] | null): Promise<HoursResponse> {
+  const { from, to } = monthWindow(month);
+  const allow = userIds ? new Set(userIds) : null;
+  const [users, entries, summaries, orders, sites] = await Promise.all([
+    db.users.where('role').equals('WORKER').toArray(),
+    db.timeEntries.where('date').between(from, to, true, true).toArray(),
+    db.summaries.toArray(),
+    db.orders.toArray(),
+    db.sites.toArray(),
+  ]);
+  const mine = entries.filter((e) => !allow || allow.has(e.userId)).sort((a, b) => a.startedAt - b.startedAt);
+  const shifts = mine.filter((e) => e.kind === 'SHIFT');
+  const segments = mine.filter((e) => e.kind === 'ORDER' && monthOf(e.date) === month);
+  const worked = new Set(shifts.filter((e) => monthOf(e.date) === month).map((e) => e.userId));
+  const orderIds = new Set(segments.map((e) => e.workOrderId));
+  const usedOrders = orders.filter((o) => orderIds.has(o.id));
+  const siteIds = new Set(usedOrders.map((o) => o.siteId));
+  return {
+    month,
+    from,
+    to,
+    workers: users
+      .filter((u) => (!allow || allow.has(u.id)) && (u.active !== false || worked.has(u.id)))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName, 'sl'))
+      .map(publicUser),
+    shifts,
+    segments,
+    orders: usedOrders.map((o) => ({ id: o.id, code: o.code, title: o.title, siteId: o.siteId })),
+    sites: sites.filter((s) => siteIds.has(s.id)),
+    summaries: summaries.filter((s) => monthOf(s.date) === month && (!allow || allow.has(s.userId))).map((s) => ({ id: s.id, userId: s.userId, date: s.date, status: s.status })),
+    serverTime: Date.now(),
+  };
 }
 
 async function overview(db: MockServerDb, date: IsoDate): Promise<ManagerOverviewResponse> {
@@ -516,9 +811,10 @@ async function overview(db: MockServerDb, date: IsoDate): Promise<ManagerOvervie
     return {
       user: publicUser(u),
       presence: open ? 'WORKING' : shifts.length > 0 ? 'FINISHED' : 'NOT_STARTED',
-      site: recentOrder ? (siteById.get(recentOrder.siteId) ?? null) : null,
+      site: siteById.get((open ?? shifts.at(-1))?.siteId ?? '') ?? (recentOrder ? (siteById.get(recentOrder.siteId) ?? null) : null),
       activeOrderCode: activeSeg ? (orderById.get(activeSeg.workOrderId ?? '')?.code ?? null) : null,
       shiftStartedAt: shifts[0]?.startedAt ?? null,
+      shiftEndedAt: open ? null : shifts.reduce<number | null>((m, s) => (s.endedAt != null && (m === null || s.endedAt > m) ? s.endedAt : m), null),
       minutesToday: shifts.reduce((sum, s) => sum + entryMinutes(s, now), 0),
       summaryId: summary?.id ?? null,
       summaryStatus: summary?.status ?? null,

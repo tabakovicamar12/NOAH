@@ -1,11 +1,11 @@
 import { inject } from '@angular/core';
 import { Router, type CanActivateFn, type UrlTree } from '@angular/router';
-import type { Role } from '../models/domain.models';
+import { isAdmin, isDeskRole, type Role } from '../models/domain.models';
 import { ConsentService } from './consent.service';
 import { SessionStore } from './session.store';
 
 export function homeFor(role: Role | null): string {
-  return role === 'MANAGER' ? '/m' : role === 'WORKER' ? '/w' : '/login';
+  return isDeskRole(role) ? '/m' : role === 'WORKER' ? '/w' : '/login';
 }
 
 export const authGuard: CanActivateFn = (): boolean | UrlTree => {
@@ -13,12 +13,23 @@ export const authGuard: CanActivateFn = (): boolean | UrlTree => {
   return session.session() ? true : inject(Router).createUrlTree(['/login']);
 };
 
-export function roleGuard(role: Role): CanActivateFn {
-  return (): boolean | UrlTree => {
-    const current = inject(SessionStore).role();
-    return current === role ? true : inject(Router).createUrlTree([homeFor(current)]);
-  };
-}
+/** The field app: workers only. */
+export const workerGuard: CanActivateFn = (): boolean | UrlTree => {
+  const current = inject(SessionStore).role();
+  return current === 'WORKER' ? true : inject(Router).createUrlTree([homeFor(current)]);
+};
+
+/** The desk: administrators, managers and foremen. The server narrows each to their own scope. */
+export const deskGuard: CanActivateFn = (): boolean | UrlTree => {
+  const current = inject(SessionStore).role();
+  return isDeskRole(current) ? true : inject(Router).createUrlTree([homeFor(current)]);
+};
+
+/** Account administration. */
+export const adminGuard: CanActivateFn = (): boolean | UrlTree => {
+  const current = inject(SessionStore).role();
+  return isAdmin(current) ? true : inject(Router).createUrlTree([homeFor(current)]);
+};
 
 /** First login on a device (or a new notice version) must pass the consent modal. */
 export const consentGuard: CanActivateFn = async (): Promise<boolean | UrlTree> => {

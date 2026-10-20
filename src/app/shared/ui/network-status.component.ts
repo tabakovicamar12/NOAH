@@ -14,6 +14,29 @@ import { IconComponent } from './icon.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'relative inline-block', '(document:pointerdown)': 'onOutside($event)', '(document:keydown.escape)': 'open.set(false)' },
   template: `
+    @if (variant() === 'pill' || variant() === 'line') {
+      <button
+        type="button"
+        class="net-pill"
+        [class.is-line]="variant() === 'line'"
+        [class.on-dark]="variant() === 'line' && onDark()"
+        [class.is-offline]="!network.online()"
+        [class.is-failed]="sync.failedItems().length > 0"
+        [attr.aria-expanded]="open()"
+        aria-controls="aon-net-panel"
+        [attr.aria-label]="i18n.t('net.badgeLabel', { state: stateLabel(), n: sync.unsyncedCount() })"
+        (click)="open.set(!open())"
+      >
+        @if (!network.online()) {
+          <aon-icon name="cloud-off" [size]="16" />
+        } @else if (sync.phase() === 'SYNCING') {
+          <aon-icon name="refresh" [size]="16" class="animate-spin [animation-duration:1.4s]" />
+        } @else {
+          <span class="net-dot"></span>
+        }
+        <span>{{ stateLabel() }} · {{ i18n.t('net.waiting', { n: sync.unsyncedCount() }) }}</span>
+      </button>
+    } @else {
     <button
       type="button"
       class="flex min-h-12 items-stretch text-left"
@@ -46,6 +69,7 @@ import { IconComponent } from './icon.component';
         </span>
       }
     </button>
+    }
 
     @if (open()) {
       <div
@@ -90,6 +114,68 @@ import { IconComponent } from './icon.component';
       </div>
     }
   `,
+  styles: `
+    .net-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      min-height: 2.375rem;
+      padding: 0 0.95rem;
+      border-radius: 0.5rem;
+      border: 1px solid var(--color-line-strong);
+      background: var(--color-field);
+      color: var(--color-text);
+      font-family: var(--font-ui);
+      font-size: 0.97rem;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: background-color 160ms var(--ease-out-expo);
+    }
+    /* The field bar's quiet form: the same status, no box; it keeps a glove-sized hit area. */
+    .net-pill.is-line {
+      min-height: 2.75rem;
+      padding: 0 0.4rem;
+      border-color: transparent;
+      background: transparent;
+      font-size: 0.92rem;
+    }
+    .net-pill.is-line.is-offline {
+      background: var(--color-gold-tint);
+    }
+    /* On the dark field bar: light text, a faint hover; warnings keep their own tint and ink. */
+    .net-pill.is-line.on-dark {
+      color: #d6d4ce;
+    }
+    .net-pill.is-line.on-dark:hover {
+      background: rgb(255 255 255 / 0.08);
+    }
+    .net-pill.is-line.on-dark.is-offline {
+      background: var(--color-gold-tint);
+      color: var(--color-text);
+    }
+    .net-pill.is-line.on-dark.is-failed {
+      background: var(--color-bad-tint);
+      color: var(--color-bad-ink);
+    }
+    .net-pill:hover {
+      background: #e6e4df;
+    }
+    .net-pill.is-offline {
+      background: var(--color-gold-tint);
+      border-color: var(--color-gold);
+    }
+    .net-pill.is-failed {
+      background: var(--color-bad-tint);
+      border-color: var(--color-bad);
+      color: var(--color-bad-ink);
+    }
+    .net-dot {
+      width: 0.6rem;
+      height: 0.6rem;
+      border-radius: 9999px;
+      background: var(--color-ok);
+    }
+  `,
 })
 export class NetworkStatusComponent {
   protected readonly i18n = inject(I18nService);
@@ -100,6 +186,8 @@ export class NetworkStatusComponent {
   readonly onDark = input<boolean>(true);
   readonly align = input<'start' | 'end'>('end');
   readonly placement = input<'top' | 'bottom'>('bottom');
+  /** `pill`: rounded status chip; `line`: the same status as quiet text (field bar); `badge`: the legacy square badge. */
+  readonly variant = input<'badge' | 'pill' | 'line'>('badge');
   protected readonly open = signal(false);
 
   protected readonly stateLabel = computed(() => {

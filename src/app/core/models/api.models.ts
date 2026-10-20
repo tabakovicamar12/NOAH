@@ -5,6 +5,7 @@
  * Every mutating request carries `Idempotency-Key: <opId>` so the sync engine can replay safely.
  */
 import type {
+  CrewMember,
   DailySummary,
   IsoDate,
   LogEntry,
@@ -21,16 +22,47 @@ import type {
   WorkOrderStatus,
 } from './domain.models';
 
+/**
+ * The login screen's two doors: the field app (WORKER) or the desk (MANAGER, which admits administrators,
+ * managers and foremen). The server answers ROLE_MISMATCH when the account belongs to the other door.
+ */
+export type LoginSide = 'WORKER' | 'MANAGER';
+
 // POST /auth/login
 export interface LoginRequest {
   readonly username: string;
   readonly password: string;
-  readonly role: Role;
+  readonly role: LoginSide;
 }
 export interface LoginResponse {
   readonly token: string;
   readonly expiresAt: number;
   readonly user: User;
+  /**
+   * What this account already acknowledged or consented to, from any device, so a new phone or a cleared
+   * browser does not ask again. Each entry is the newest record of its kind.
+   */
+  readonly consents?: LoginConsents;
+}
+export interface LoginConsents {
+  /** Version of the privacy notice acknowledged, if it is the current one. */
+  readonly notice: { readonly version: string; readonly acceptedAt: number } | null;
+  /** Newest voice-input decision (a version ending in `:withdrawn` is a withdrawal). */
+  readonly voice: { readonly version: string; readonly acceptedAt: number } | null;
+}
+
+// GET /org  (public: the employer that runs this installation, for the privacy notice and printed reports)
+export interface OrgInfo {
+  /** Company name, e.g. "NOAH d.o.o."; null until the installation is configured. */
+  readonly name: string | null;
+  readonly address: string | null;
+  readonly taxId: string | null;
+  /** Where workers send privacy requests. */
+  readonly privacyContact: string | null;
+  /** Data protection officer, when one is appointed. */
+  readonly dpo: string | null;
+  /** How long photos are kept, in days; null when they are not deleted automatically. */
+  readonly photoRetentionDays: number | null;
 }
 
 // GET /health
@@ -42,7 +74,17 @@ export interface HealthResponse {
 // GET /worker/orders  (published orders where the caller is in the crew)
 export interface WorkerOrdersResponse {
   readonly orders: readonly WorkOrder[];
+  /** Active objects the worker can choose at ZAČNI DELO. */
+  readonly sites?: readonly Site[];
   readonly serverTime: number;
+}
+
+// GET /worker/day?date=&from=  (the caller's own records of one day, from every device)
+export interface WorkerDayResponse {
+  /** Entries of that date, plus any entry still open from an earlier day. */
+  readonly timeEntries: readonly TimeEntry[];
+  /** Log entries created from `from` (local midnight) for 26 hours. */
+  readonly logs: readonly LogEntry[];
 }
 
 // POST /consents
@@ -127,26 +169,97 @@ export interface ProjectSummary {
   readonly project: Project;
   readonly sites: readonly Site[];
   readonly orders: readonly ProjectOrderRow[];
+  /** Managers assigned to the project. */
+  readonly managers: readonly CrewMember[];
+  /** Foremen assigned to each object, keyed by site id. */
+  readonly foremen: Readonly<Record<string, readonly CrewMember[]>>;
 }
 
-// POST /manager/projects  (managers with canManageProjects; 409 when the code is taken)
+// POST /manager/projects  (administrator; 409 when the code is taken)
 export interface ProjectCreate {
-  readonly code: string;
+  /** Leave out to get the next number (P-2026-001). */
+  readonly code?: string;
   readonly name: string;
 }
 
-// POST /manager/sites  (managers with canManageProjects; 409 when the project already has this code)
+// POST /manager/sites  (administrator; 409 when the project already has this code)
 export interface SiteCreate {
   readonly projectId: string;
-  readonly code: string;
+  /** Leave out to get the next object number in the project (O-1, O-2 …). */
+  readonly code?: string;
   readonly name: string;
   readonly city: string;
 }
 
-// GET /manager/projects
+// GET /manager/projects  (scoped: administrator all, manager their projects, foreman their objects)
 export interface ManagerProjectsResponse {
   readonly projects: readonly ProjectSummary[];
   readonly serverTime: number;
+}
+
+// ---------- Administrator ----------
+
+// PATCH /admin/projects/:id  (archiving hides the project and its objects; records stay)
+export interface ProjectUpdate {
+  readonly name?: string;
+  readonly active?: boolean;
+}
+
+// PATCH /admin/sites/:id
+export interface SiteUpdate {
+  readonly name?: string;
+  readonly city?: string;
+  readonly active?: boolean;
+}
+
+// PUT /admin/projects/:id/managers (MANAGER accounts) · PUT /admin/sites/:id/foremen (FOREMAN accounts)
+export interface AssignmentUpdate {
+  readonly userIds: readonly string[];
+}
+
+export interface AdminUser {
+  readonly id: string;
+  readonly username: string;
+  readonly displayName: string;
+  readonly role: Role;
+  readonly crew: string | null;
+  readonly active: boolean;
+  /** Projects a manager leads, or the projects of the objects a foreman leads. */
+  readonly projects: readonly { readonly id: string; readonly code: string; readonly name: string }[];
+  /** Objects a foreman leads. */
+  readonly sites: readonly { readonly id: string; readonly code: string; readonly name: string }[];
+  /** Published, unfinished orders this worker is on. */
+  readonly openOrders: number;
+}
+
+// GET /admin/users
+export interface AdminUsersResponse {
+  readonly users: readonly AdminUser[];
+}
+
+// POST /admin/users  (409 USERNAME_TAKEN)
+export interface AdminUserCreate {
+  readonly username: string;
+  readonly displayName: string;
+  readonly role: Role;
+  readonly crew: string | null;
+  readonly password: string;
+}
+
+/**
+ * PATCH /admin/users/:id. Refused with 409: changing your own role or deactivating yourself (SELF_LOCKOUT),
+ * leaving no active administrator (LAST_ADMIN), moving a worker who is still on open orders (OPEN_ORDERS).
+ */
+export interface AdminUserUpdate {
+  readonly displayName?: string;
+  readonly role?: Role;
+  readonly crew?: string | null;
+  readonly active?: boolean;
+}
+
+// POST /admin/users/:id/password
+export interface PasswordReset {
+  readonly password: string;
 }
 
 export type WorkerPresence = 'WORKING' | 'NOT_STARTED' | 'FINISHED';
@@ -157,6 +270,8 @@ export interface WorkerOverview {
   readonly site: Site | null;
   readonly activeOrderCode: string | null;
   readonly shiftStartedAt: number | null;
+  /** When the day's last shift ended; null while a shift is still running or none was started. */
+  readonly shiftEndedAt: number | null;
   readonly minutesToday: number;
   readonly summaryId: string | null;
   readonly summaryStatus: DailySummary['status'] | null;
@@ -177,6 +292,32 @@ export interface ManagerOverviewResponse {
   readonly workers: readonly WorkerOverview[];
   readonly orders: readonly OrderOverview[];
   readonly summaries: readonly DailySummary[];
+  readonly serverTime: number;
+}
+
+/** A work order as the hours record names it. */
+export interface HoursOrderRef {
+  readonly id: string;
+  readonly code: string | null;
+  readonly title: string;
+  readonly siteId: string;
+}
+
+/**
+ * Working time for one month: every shift from just before the year's start to the end of the month (yearly
+ * overtime and rest need the run-up), the order segments inside the month, and each day's report status.
+ * Desk users get the workers in their scope; a worker gets only themself.
+ */
+export interface HoursResponse {
+  readonly month: string;
+  readonly from: IsoDate;
+  readonly to: IsoDate;
+  readonly workers: readonly User[];
+  readonly shifts: readonly TimeEntry[];
+  readonly segments: readonly TimeEntry[];
+  readonly orders: readonly HoursOrderRef[];
+  readonly sites: readonly Site[];
+  readonly summaries: ReadonlyArray<Pick<DailySummary, 'id' | 'userId' | 'date' | 'status'>>;
   readonly serverTime: number;
 }
 

@@ -15,7 +15,7 @@ import type {
   WorkOrderDetailResponse,
   WorkOrderUpsert,
 } from '../../../core/models/api.models';
-import type { IsoDate, Project, Site } from '../../../core/models/domain.models';
+import { canApproveReports, isAdmin, type IsoDate, type Project, type Site } from '../../../core/models/domain.models';
 import { NetworkStatusService } from '../../../core/network/network-status.service';
 import { SyncEngine } from '../../../core/sync/sync-engine.service';
 import { entityKeys, queueItem } from '../../../core/sync/sync-queue';
@@ -51,8 +51,13 @@ export class ManagerStore {
   readonly savedAt = signal<number | null>(null);
   readonly state = signal<OverviewState>('LOADING');
   readonly isToday = computed(() => this.date() === toIsoDate());
-  /** This manager may add projects and objects. */
-  readonly canManageProjects = computed(() => this.session.user()?.canManageProjects === true);
+  /** The header search: filters the orders and team tables wherever the manager types it. */
+  readonly query = signal('');
+  readonly role = computed(() => this.session.user()?.role ?? null);
+  /** Administrator: accounts, projects, objects and who leads them. */
+  readonly isAdmin = computed(() => isAdmin(this.role()));
+  /** May approve or return daily reports (not a foreman). */
+  readonly canApprove = computed(() => canApproveReports(this.role()));
 
   readonly directory = signal<ManagerDirectoryResponse | null>(null);
   readonly directoryState = signal<DirectoryState>('LOADING');
