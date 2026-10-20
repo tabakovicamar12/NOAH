@@ -27,6 +27,7 @@ import { createPhotoStore } from './storage';
  *   npm run cli -- create-site --project HN --code HN-1 --name "Maribor, Tezno" --city Maribor
  *   npm run cli -- list
  *   npm run cli -- seed-demo                 synthetic demo data (never on a production database)
+ *   npm run cli -- seed-demo --users-only    empty database with only the test accounts
  *   npm run cli -- purge-photos --dry-run    photos older than PHOTO_RETENTION_DAYS (or --days N): count only
  *   npm run cli -- purge-photos              …and delete them (files and records); run on a schedule
  */
@@ -167,7 +168,7 @@ async function run(db: Db, cmd: string, args: Args): Promise<void> {
     case 'seed-demo': {
       if (process.env['NODE_ENV'] === 'production' && !args['force']) throw new Error('Refusing to seed demo data in production (add --force if you really mean it).');
       await migrate(db);
-      await seedDemo(db);
+      await seedDemo(db, { usersOnly: !!args['users-only'] });
       console.log('Demo data loaded. Accounts: admin / admin-demo-2026, vodja / vodja-demo-2026, delovodja / delovodja-demo-2026, delavec / delavec-demo-2026 (other workers: demo-geslo-2026).');
       return;
     }

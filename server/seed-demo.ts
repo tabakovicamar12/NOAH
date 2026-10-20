@@ -5,8 +5,9 @@ import type { Db } from './db';
 /**
  * Synthetic demo data for local runs and presentations. Every person, place and figure is invented.
  * Replaces all existing data, so it must never run against a production database.
+ * `usersOnly`: an empty database with just the test accounts, for testing the app from a clean start.
  */
-export async function seedDemo(db: Db): Promise<void> {
+export async function seedDemo(db: Db, options: { readonly usersOnly?: boolean } = {}): Promise<void> {
   const now = Date.now();
   const day = (offset: number): string => {
     const d = new Date(now + offset * 86_400_000);
@@ -41,6 +42,7 @@ export async function seedDemo(db: Db): Promise<void> {
         id, username, name, role, crew, hashes.get(pw) ?? '', now,
       ]);
     }
+    if (options.usersOnly) return;
     for (const [id, code, name] of [['p-hn', 'HN', 'Hiša Novak'], ['p-hm', 'HM', 'Hiša Müller'], ['p-hk', 'HK', 'Hiša Kovač']] as const) {
       await tx.query(`insert into projects (id, code, name, active, created_at) values ($1,$2,$3,true,$4)`, [id, code, name, now]);
     }
