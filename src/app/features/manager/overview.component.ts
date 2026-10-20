@@ -1156,16 +1156,20 @@ export class OverviewComponent implements OnInit {
       mq.addEventListener('change', onChange);
       this.destroyRef.onDestroy(() => mq.removeEventListener('change', onChange));
     }
-    // Keep the day's picture fresh while the office has signal: every 20 s while the page is in view, and at
-    // once when the window comes back to the front.
-    const refresh = (): void => {
-      if (document.visibilityState === 'visible' && this.store.state() !== 'LOADING') void this.store.load();
+    // Keep the day's picture fresh while the office has signal. A tiny "anything new?" every 4 s reloads the
+    // day only when a worker's entry has arrived; a full reload every minute and on return to the window
+    // catches the rest (e.g. a day that rolled over).
+    const visible = (): boolean => document.visibilityState === 'visible';
+    const check = setInterval(() => visible() && void this.store.checkForChanges(), 4_000);
+    const full = setInterval(() => visible() && this.store.state() !== 'LOADING' && void this.store.load(), 60_000);
+    const onVisible = (): void => {
+      if (visible() && this.store.state() !== 'LOADING') void this.store.load();
     };
-    const timer = setInterval(refresh, 20_000);
-    document.addEventListener('visibilitychange', refresh);
+    document.addEventListener('visibilitychange', onVisible);
     this.destroyRef.onDestroy(() => {
-      clearInterval(timer);
-      document.removeEventListener('visibilitychange', refresh);
+      clearInterval(check);
+      clearInterval(full);
+      document.removeEventListener('visibilitychange', onVisible);
     });
   }
 

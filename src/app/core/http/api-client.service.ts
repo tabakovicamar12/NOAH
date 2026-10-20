@@ -47,6 +47,10 @@ export class ApiClient {
     return firstValueFrom(this.http.post<LoginResponse>(`${this.base}/auth/login`, body));
   }
 
+  managerChanges(): Promise<{ readonly changedAt: number }> {
+    return firstValueFrom(this.http.get<{ readonly changedAt: number }>(`${this.base}/manager/changes`));
+  }
+
   org(): Promise<OrgInfo> {
     return firstValueFrom(this.http.get<OrgInfo>(`${this.base}/org`));
   }

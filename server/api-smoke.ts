@@ -142,6 +142,13 @@ async function main(): Promise<void> {
   await call('POST', '/consents', worker, { version: CONSENT_VERSION, acceptedAt: Date.now() });
   const again = await call('POST', '/auth/login', null, { username: 'delavec', password: 'delavec-geslo-123', role: 'WORKER' });
   check('another device learns the notice was acknowledged', again.body?.consents?.notice?.version === CONSENT_VERSION);
+  // The desk's cheap "anything new?" moves with every recorded entry
+  const before = (await call('GET', '/manager/changes', admin)).body?.changedAt ?? 0;
+  await log(o2.id, 1, null);
+  const after2 = (await call('GET', '/manager/changes', admin)).body?.changedAt ?? 0;
+  check('a worker entry moves the change marker', after2 > before, `${before} -> ${after2}`);
+  check('workers cannot read the change marker', (await call('GET', '/manager/changes', worker)).status === 403);
+
   const org = await call('GET', '/org', null);
   check('employer details are public', org.status === 200 && 'name' in (org.body ?? {}));
 

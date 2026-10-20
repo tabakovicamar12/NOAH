@@ -6,7 +6,7 @@ import { environment } from '../../../environments/environment';
 
 const SIMULATE_KEY = 'aon.simulateOffline';
 /** How often the server is tried again after a failed request, while the phone still reports a network. */
-const UNREACHABLE_PROBE_MS = 5_000;
+const UNREACHABLE_PROBE_MS = 3_000;
 
 /**
  * Single source of truth for connectivity. "Online" means all three hold:

@@ -268,6 +268,17 @@ create index if not exists time_entries_site_idx on time_entries(site_id, date);
 alter table daily_summaries add column if not exists site_name text;
 `,
   },
+  {
+    id: '009_change_marker',
+    // The time of the last recorded change, so the desk can poll for news without loading the whole day.
+    sql: `
+create table if not exists change_marker (
+  id         integer primary key check (id = 1),
+  changed_at bigint not null
+);
+alter table change_marker enable row level security;
+`,
+  },
 ];
 
 export async function migrate(db: Db, log: (msg: string) => void = () => undefined): Promise<string[]> {

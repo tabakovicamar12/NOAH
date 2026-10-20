@@ -120,6 +120,27 @@ export class ManagerStore {
     }
   }
 
+  private seenChangeAt = 0;
+
+  /**
+   * Cheap check for news: reloads the day only when the server recorded a change after the overview on
+   * screen was built. Both times are the server's own clock, so a phone's wrong clock cannot hide news.
+   */
+  async checkForChanges(): Promise<void> {
+    if (!this.uid() || !this.network.online()) return;
+    try {
+      const { changedAt } = await this.api.managerChanges();
+      const shownAt = this.overview()?.serverTime ?? 0;
+      const isNew = changedAt > shownAt && changedAt > this.seenChangeAt;
+      if (isNew && this.state() !== 'LOADING') {
+        this.seenChangeAt = changedAt;
+        await this.load();
+      }
+    } catch {
+      /* the regular refresh still runs */
+    }
+  }
+
   /** Projects, objects and workers for the order form. Cached for offline use. */
   async loadDirectory(): Promise<void> {
     if (!this.directory()) this.directoryState.set('LOADING');

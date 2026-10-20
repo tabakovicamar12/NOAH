@@ -200,8 +200,12 @@ async function withIdempotency(db: MockServerDb, req: HttpRequest<unknown>, fn: 
   if (await db.idempotency.get(key)) return null;
   await fn();
   await db.idempotency.put({ key, at: Date.now() });
+  lastChangeAt = Date.now();
   return null;
 }
+
+/** Time of the last mutation, for GET /manager/changes. */
+let lastChangeAt = Date.now();
 
 function entryMinutes(e: TimeEntry, now: number): number {
   return minutesBetween(e.startedAt, e.endedAt ?? now);
@@ -358,6 +362,11 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
   if (method === 'GET' && path === '/worker/hours') {
     requireRole(me, 'WORKER');
     return hours(db, monthParam(url), [me.id]);
+  }
+
+  if (method === 'GET' && path === '/manager/changes') {
+    requireDesk(me);
+    return { changedAt: lastChangeAt };
   }
 
   if (method === 'POST' && path === '/consents') {
@@ -737,6 +746,7 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
     if (body.decision === 'RETURNED' && !note) throw new MockHttpError(400, 'A returned report needs a note');
     if (existing.status !== 'SUBMITTED') throw new MockHttpError(409, 'Only a submitted report can be reviewed');
     await db.summaries.put({ ...existing, status: body.decision, reviewedAt: Date.now(), reviewerName: me.displayName, reviewerNote: note });
+    lastChangeAt = Date.now();
     return null;
   }
 

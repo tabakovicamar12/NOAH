@@ -241,8 +241,14 @@ async function idempotent(c: Context<Env>, fn: (db: Db) => Promise<void>): Promi
     );
     if (claimed.length === 0) return;
     await fn(tx);
+    await markChanged(tx);
   });
   return c.body(null, 204);
+}
+
+/** One row with the time of the last recorded change: the desk polls it cheaply and reloads only on news. */
+async function markChanged(db: Db): Promise<void> {
+  await db.query(`insert into change_marker (id, changed_at) values (1, $1) on conflict (id) do update set changed_at = excluded.changed_at`, [Date.now()]);
 }
 
 // ---------- app ----------
@@ -636,6 +642,12 @@ export function createApp(config: ServerConfig): Hono<Env> {
     return idempotent(c, async (db) => upsertOrder(db, me, id, body, await scopeOf(db, me)));
   });
 
+  // Tiny and frequent: the overview asks this every few seconds and reloads only when it moved.
+  api.get('/manager/changes', deskOnly, async (c) => {
+    const row = (await c.get('db').query(`select changed_at from change_marker where id = 1`))[0];
+    return c.json({ changedAt: row ? Number(row['changed_at']) : 0 });
+  });
+
   api.get('/manager/overview', deskOnly, async (c) => {
     const date = requireDate(c.req.query('date') ?? today(), 'date');
     const db = c.get('db');
@@ -796,6 +808,7 @@ export function createApp(config: ServerConfig): Hono<Env> {
         me.displayName,
         note,
       ]);
+      await markChanged(db);
     });
     return c.body(null, 204);
   });
