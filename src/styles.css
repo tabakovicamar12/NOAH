@@ -134,6 +134,39 @@
   textarea,
   select {
     caret-color: var(--color-ink);
+    max-width: 100%;
+    min-width: 0;
+  }
+  button,
+  a,
+  label,
+  input,
+  select,
+  textarea {
+    /* No 300 ms double-tap wait on taps. */
+    touch-action: manipulation;
+  }
+  /* iOS Safari: date and time fields keep a native minimum width and spill out of narrow cards; the
+     picker still opens on tap without the native box. */
+  @supports (-webkit-touch-callout: none) {
+    input[type='date'],
+    input[type='time'],
+    input[type='datetime-local'] {
+      -webkit-appearance: none;
+      appearance: none;
+      display: block;
+      width: 100%;
+    }
+    input::-webkit-date-and-time-value {
+      min-height: 1.4em;
+      text-align: left;
+    }
+    /* Safari zooms the page into any field set below 16px; that zoom is what pushes forms off the edge. */
+    input,
+    select,
+    textarea {
+      font-size: max(16px, 1em);
+    }
   }
   a {
     text-underline-offset: 0.2em;
@@ -792,10 +825,10 @@
   flex: 0 0 auto;
   margin-top: 0.1rem;
 }
-/* The thumb-zone slab: the screen's one decisive action, above the tab bar. */
+/* The thumb-zone slab: the screen's one decisive action, just above the fixed dock (4.5rem + 0.75rem gap). */
 .wkr-ui .w-slab {
   position: sticky;
-  bottom: calc(3.6rem + env(safe-area-inset-bottom));
+  bottom: calc(5.5rem + env(safe-area-inset-bottom));
   z-index: 30;
   padding: 0.65rem 0.875rem 0.5rem;
   background: linear-gradient(to bottom, rgb(247 246 242 / 0), var(--color-site) 0.6rem);

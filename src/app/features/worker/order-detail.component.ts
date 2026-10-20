@@ -362,7 +362,7 @@ type NoteMode = 'NOTE' | 'ISSUE';
     }
     .fix-row {
       display: grid;
-      grid-template-columns: 1fr 1.4fr;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
       gap: 0.5rem;
     }
     .custom {

@@ -8,7 +8,7 @@ import {
   provideZonelessChangeDetection,
   type ApplicationConfig,
 } from '@angular/core';
-import { provideRouter, withComponentInputBinding, withInMemoryScrolling } from '@angular/router';
+import { PreloadAllModules, provideRouter, withComponentInputBinding, withInMemoryScrolling, withPreloading } from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
 import { environment } from '../environments/environment';
 import { routes } from './app.routes';
@@ -42,7 +42,13 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     { provide: ErrorHandler, useClass: GlobalErrorHandler },
     provideHttpClient(withInterceptors(interceptors)),
-    provideRouter(routes, withComponentInputBinding(), withInMemoryScrolling({ scrollPositionRestoration: 'top', anchorScrolling: 'enabled' })),
+    provideRouter(
+      routes,
+      withComponentInputBinding(),
+      withInMemoryScrolling({ scrollPositionRestoration: 'top', anchorScrolling: 'enabled' }),
+      // Every screen loads in the background after start, so a tap on the dock opens it at once, also offline.
+      withPreloading(PreloadAllModules),
+    ),
     provideAppInitializer(bootstrapDevice),
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),

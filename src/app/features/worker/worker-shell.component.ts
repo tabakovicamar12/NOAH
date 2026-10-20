@@ -141,6 +141,15 @@ interface Tab {
       box-shadow: 0 0 0 100vmax var(--color-rail);
       clip-path: inset(0 -100vmax);
     }
+    /* On the narrowest phones the status gives way (ellipsis) so the initials stay whole. */
+    .top aon-network-status {
+      flex: 0 1 auto;
+      min-width: 0;
+    }
+    .top .mark,
+    .top .who {
+      flex-shrink: 0;
+    }
     .mark {
       color: var(--color-gold);
       font-size: 1.6rem;
@@ -167,20 +176,24 @@ interface Tab {
     .main {
       flex: 1 1 auto;
       outline: none;
+      /* room for the fixed dock, so the last card never hides under it */
+      padding-bottom: calc(env(safe-area-inset-bottom) + 6.25rem);
     }
     /* The floating pill: four places and the shift button in the middle, under the thumb. */
+    /* Fixed, not sticky: iOS Safari's collapsing toolbar makes a sticky bar jump. */
     .dock {
-      position: sticky;
-      bottom: calc(env(safe-area-inset-bottom) + 0.85rem);
+      position: fixed;
+      left: 50%;
+      bottom: calc(env(safe-area-inset-bottom) + 0.75rem);
       z-index: 40;
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 4.6rem minmax(0, 1fr) minmax(0, 1fr);
       align-items: center;
-      width: calc(100% - 1.75rem);
+      width: calc(100% - 1.5rem);
       max-width: 30rem;
       height: 4.5rem;
-      margin: 0.85rem auto calc(env(safe-area-inset-bottom) + 0.85rem);
       padding: 0 0.35rem;
+      transform: translateX(-50%);
       border-radius: 9999px;
       background: var(--color-rail);
       box-shadow: 0 18px 30px -16px rgb(20 20 20 / 0.7);
@@ -197,13 +210,45 @@ interface Tab {
       font-size: 0.72rem;
       font-weight: 500;
       text-decoration: none;
+      /* no double-tap zoom wait, no grey flash: the press shows through our own state */
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+      transition:
+        color 160ms var(--ease-out-expo),
+        background-color 160ms var(--ease-out-expo),
+        transform 120ms var(--ease-out-expo);
     }
-    .tab {
-      transition: color 160ms var(--ease-out-expo);
+    .tab aon-icon {
+      display: grid;
+      place-items: center;
+      width: 2.6rem;
+      height: 1.8rem;
+      border-radius: 9999px;
+      transition: background-color 160ms var(--ease-out-expo);
+    }
+    .tab:active {
+      transform: scale(0.92);
+      color: #ecebe7;
+    }
+    .tab:active aon-icon {
+      background: rgb(255 255 255 / 0.12);
     }
     .tab.is-active {
       color: var(--color-gold);
       font-weight: 700;
+    }
+    .tab.is-active aon-icon {
+      background: rgb(193 160 80 / 0.18);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .tab,
+      .tab aon-icon {
+        transition: none;
+      }
+      .tab:active {
+        transform: none;
+      }
     }
     .tab:focus-visible,
     .shift:focus-visible {
@@ -330,7 +375,6 @@ interface Tab {
       }
       .dock {
         height: 3.9rem;
-        margin-top: 0.5rem;
       }
       .tab {
         flex-direction: row;

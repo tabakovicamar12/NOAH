@@ -13,7 +13,7 @@ import { IconComponent } from './icon.component';
   imports: [IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
-    class: 'relative inline-block',
+    class: 'relative inline-block max-w-full',
     '(document:pointerdown)': 'onOutside($event)',
     '(document:keydown.escape)': 'open.set(false)',
     '(window:resize)': 'open.set(false)',
@@ -40,7 +40,7 @@ import { IconComponent } from './icon.component';
         } @else {
           <span class="net-dot"></span>
         }
-        <span>{{ stateLabel() }} · {{ i18n.t('net.waiting', { n: sync.unsyncedCount() }) }}</span>
+        <span class="net-text">{{ stateLabel() }} · {{ i18n.t('net.waiting', { n: sync.unsyncedCount() }) }}</span>
       </button>
     } @else {
     <button
@@ -282,6 +282,14 @@ import { IconComponent } from './icon.component';
       background: var(--color-bad-tint);
       border-color: var(--color-bad);
       color: var(--color-bad-ink);
+    }
+    .net-pill {
+      max-width: 100%;
+    }
+    .net-text {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .net-dot {
       width: 0.6rem;
