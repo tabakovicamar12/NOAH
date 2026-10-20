@@ -8,7 +8,8 @@ export class BlobUrls {
   url(id: string, blob: Blob | null): string | null {
     if (!blob) return null;
     const hit = this.urls.get(id);
-    if (hit && hit.blob === blob) return hit.url;
+    // Rows re-read from storage come back as new Blob objects with the same bytes; same id and size is the same photo.
+    if (hit && (hit.blob === blob || hit.blob.size === blob.size)) return hit.url;
     if (hit) URL.revokeObjectURL(hit.url);
     const url = URL.createObjectURL(blob);
     this.urls.set(id, { blob, url });

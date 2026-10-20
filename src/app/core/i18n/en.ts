@@ -989,4 +989,8 @@ export const EN: Dictionary = {
   'voice.modelP1': 'Speech will be turned into text on this phone. The audio never leaves the device and it costs nothing.',
   'voice.modelP2': 'The first time, a Slovenian model of about {mb} MB is downloaded. Wi-Fi is recommended.',
   'voice.modelP3': 'The model stays on the phone, so voice input then works offline too.',
+  'more.retryingTitle': 'Waiting to retry',
+  'more.retryingHint': 'These entries are saved on the phone and are being sent again. The reason for the last failure is below.',
+  'more.attempts': 'Attempts: {n}',
+  'photo.lostOnDevice': 'The photo is no longer on the phone (it was saved by an older version of the app). Discard this item and take the photo again.',
 };

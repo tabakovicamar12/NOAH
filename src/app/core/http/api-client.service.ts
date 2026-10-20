@@ -85,11 +85,13 @@ export class ApiClient {
     return this.mutate('POST', `/logs`, body, opId);
   }
 
+  /**
+   * The bare JPEG as the body, the metadata in a header. No multipart: iOS Safari has sent form uploads of
+   * stored photos without their content, and a plain body has nothing to get wrong.
+   */
   uploadPhoto(meta: PhotoUploadMeta, file: Blob, opId: string): Promise<void> {
-    const form = new FormData();
-    form.append('meta', JSON.stringify(meta));
-    form.append('file', file, `${meta.id}.jpg`);
-    return this.mutate('POST', `/photos`, form, opId);
+    const headers = new HttpHeaders({ 'Idempotency-Key': opId, 'Content-Type': 'image/jpeg', 'X-Photo-Meta': toBase64Url(JSON.stringify(meta)) });
+    return firstValueFrom(this.http.post<void>(`${this.base}/photos`, file, { headers }));
   }
 
   upsertSummary(body: DailySummaryUpsert, opId: string): Promise<void> {
@@ -180,4 +182,11 @@ export class ApiClient {
     const headers = new HttpHeaders({ 'Idempotency-Key': opId });
     return firstValueFrom(this.http.request<void>(method, `${this.base}${path}`, { body, headers }));
   }
+}
+
+/** UTF-8 safe base64url, for JSON in a header (captions may hold č, š, ž). */
+function toBase64Url(text: string): string {
+  let binary = '';
+  for (const byte of new TextEncoder().encode(text)) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }

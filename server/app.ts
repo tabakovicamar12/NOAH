@@ -246,6 +246,34 @@ async function idempotent(c: Context<Env>, fn: (db: Db) => Promise<void>): Promi
   return c.body(null, 204);
 }
 
+/**
+ * A photo arrives as the bare JPEG with its metadata in the X-Photo-Meta header (base64url JSON). Older app
+ * versions send multipart form data (fields `meta` and `file`), still accepted. A body the server cannot read
+ * is the client's problem (400), never a server error.
+ */
+async function readPhotoUpload(c: Context<Env>, maxBytes: number): Promise<{ metaRaw: string; bytes: Uint8Array }> {
+  const type = (c.req.header('Content-Type') ?? '').toLowerCase();
+  if (type.startsWith('image/jpeg')) {
+    const header = c.req.header('X-Photo-Meta');
+    if (!header) throw new HttpError(400, 'X-Photo-Meta header required');
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    if (bytes.length === 0) throw new HttpError(400, 'Empty photo');
+    if (bytes.length > maxBytes) throw new HttpError(413, 'File too large');
+    return { metaRaw: Buffer.from(header, 'base64url').toString('utf8'), bytes };
+  }
+  let form: Record<string, string | File>;
+  try {
+    form = (await c.req.parseBody()) as Record<string, string | File>;
+  } catch {
+    throw new HttpError(400, 'Unreadable upload: the photo did not arrive whole');
+  }
+  const metaRaw = form['meta'];
+  const file = form['file'];
+  if (typeof metaRaw !== 'string' || !(file instanceof File)) throw new HttpError(400, 'meta and file required');
+  if (file.size > maxBytes) throw new HttpError(413, 'File too large');
+  return { metaRaw, bytes: new Uint8Array(await file.arrayBuffer()) };
+}
+
 /** One row with the time of the last recorded change: the desk polls it cheaply and reloads only on news. */
 async function markChanged(db: Db): Promise<void> {
   await db.query(`insert into change_marker (id, changed_at) values (1, $1) on conflict (id) do update set changed_at = excluded.changed_at`, [Date.now()]);
@@ -505,11 +533,7 @@ export function createApp(config: ServerConfig): Hono<Env> {
   });
 
   api.post('/photos', async (c) => {
-    const form = await c.req.parseBody();
-    const metaRaw = form['meta'];
-    const file = form['file'];
-    if (typeof metaRaw !== 'string' || !(file instanceof File)) throw new HttpError(400, 'meta and file required');
-    if (file.size > config.maxPhotoBytes) throw new HttpError(413, 'File too large');
+    const { metaRaw, bytes } = await readPhotoUpload(c, config.maxPhotoBytes);
     let meta: PhotoMeta;
     try {
       meta = JSON.parse(metaRaw) as PhotoMeta;
@@ -522,7 +546,6 @@ export function createApp(config: ServerConfig): Hono<Env> {
     if (!PHOTO_CATEGORIES.includes(meta.category)) throw new HttpError(400, 'category invalid');
     const photoId = requireId(meta.id, 'id');
     const orderId = requireId(meta.workOrderId, 'workOrderId');
-    const bytes = new Uint8Array(await file.arrayBuffer());
     // The device re-encodes every photo to JPEG (which drops EXIF); anything else is refused.
     if (bytes[0] !== 0xff || bytes[1] !== 0xd8) throw new HttpError(415, 'JPEG required');
     const order = (await c.get('db').query(`select project_id from work_orders where id = $1`, [orderId]))[0];

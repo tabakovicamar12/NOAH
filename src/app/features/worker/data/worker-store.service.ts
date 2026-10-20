@@ -1,6 +1,6 @@
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { SessionStore } from '../../../core/auth/session.store';
-import type { LocalLogEntry, LocalPhoto, LocalSummary, LocalTimeEntry, LocalWorkOrder } from '../../../core/db/aon-db';
+import { photoFromStore, type LocalLogEntry, type LocalPhoto, type LocalSummary, type LocalTimeEntry, type LocalWorkOrder } from '../../../core/db/aon-db';
 import { DatabaseService } from '../../../core/db/database.service';
 import { liveSignal } from '../../../core/db/live';
 import { ApiClient } from '../../../core/http/api-client.service';
@@ -133,7 +133,7 @@ export class WorkerStore {
     this.uid,
     async (uid): Promise<readonly LocalPhoto[]> => {
       if (!uid) return [];
-      const photos = await this.db.photos.where('userId').equals(uid).toArray();
+      const photos = (await this.db.photos.where('userId').equals(uid).toArray()).map(photoFromStore);
       return photos.sort((a, b) => b.createdAt - a.createdAt);
     },
     [] as readonly LocalPhoto[],
@@ -548,8 +548,10 @@ export class WorkerStore {
       maskCount: input.maskCount,
     };
     try {
+      // Bytes, not Blobs: see StoredPhoto. Read before the transaction, which must not wait on anything else.
+      const [blob, thumb] = await Promise.all([input.blob.arrayBuffer(), input.thumb.arrayBuffer()]);
       await this.db.transaction('rw', [this.db.photos, this.db.syncQueue], async () => {
-        await this.db.photos.add({ ...meta, blob: input.blob, thumb: input.thumb, synced: 0 });
+        await this.db.photos.add({ ...meta, blob, thumb, synced: 0 });
         await this.db.syncQueue.add(queueItem(uid, entityKeys.photo(meta.id), { type: 'PHOTO_UPLOAD', payload: meta }));
       });
     } catch (err: unknown) {

@@ -436,11 +436,12 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
   }
 
   if (method === 'POST' && path === '/photos') {
-    if (!(req.body instanceof FormData)) throw new MockHttpError(400, 'multipart body required');
-    const metaRaw = req.body.get('meta');
-    const file = req.body.get('file');
-    if (typeof metaRaw !== 'string' || !(file instanceof Blob)) throw new MockHttpError(400, 'meta and file required');
-    const meta = JSON.parse(metaRaw) as PhotoMeta;
+    // Same protocol as the server: the bare JPEG, metadata in X-Photo-Meta (base64url JSON).
+    const header = req.headers.get('X-Photo-Meta');
+    const file = req.body;
+    if (!header || !(file instanceof Blob)) throw new MockHttpError(400, 'X-Photo-Meta header and JPEG body required');
+    const json = atob(header.replace(/-/g, '+').replace(/_/g, '/'));
+    const meta = JSON.parse(new TextDecoder().decode(Uint8Array.from(json, (ch) => ch.charCodeAt(0)))) as PhotoMeta;
     return withIdempotency(db, req, async () => {
       if (meta.userId !== me.id) throw new MockHttpError(403, 'Not your photo');
       if (!meta.privacyConfirmed) throw new MockHttpError(400, 'Privacy confirmation missing');

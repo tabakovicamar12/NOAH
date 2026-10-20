@@ -82,6 +82,20 @@ import { initialsOf } from '../manager/person';
             </ul>
           }
 
+          @if (sync.retryingItems().length) {
+            <div class="w-rule"></div>
+            <h3 class="font-semibold">{{ i18n.t('more.retryingTitle') }}</h3>
+            <p class="w-small w-muted">{{ i18n.t('more.retryingHint') }}</p>
+            <ul class="mt-2 grid gap-2">
+              @for (item of sync.retryingItems(); track item.opId) {
+                <li class="retrying">
+                  <p class="font-semibold">{{ i18n.t(opKey(item.op.type)) }} · {{ i18n.time(item.createdAt) }}</p>
+                  <p class="w-small mt-0.5 break-words">{{ item.lastError }}</p>
+                  <p class="w-small w-muted mt-0.5">{{ i18n.t('more.attempts', { n: item.attempts }) }}</p>
+                </li>
+              }
+            </ul>
+          }
           <button
             type="button"
             class="w-btn w-btn-soft mt-3"
@@ -145,6 +159,11 @@ import { initialsOf } from '../manager/person';
       padding: 0.7rem 0.75rem;
       border: 1px solid #ef9a9a;
       border-radius: 0.6rem;
+    }
+    .retrying {
+      padding: 0.6rem 0.75rem;
+      border-radius: 0.6rem;
+      background: var(--color-gold-tint);
     }
     .sim {
       display: flex;

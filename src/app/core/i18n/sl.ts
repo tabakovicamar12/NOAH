@@ -987,6 +987,10 @@ export const SL = {
   'voice.modelP1': 'Govor se bo pretvoril kar na tem telefonu. Zvok ne zapusti naprave in nič ne stane.',
   'voice.modelP2': 'Prvič se prenese model za slovenščino, približno {mb} MB. Priporočamo Wi-Fi.',
   'voice.modelP3': 'Model ostane na telefonu, zato glasovni vnos potem deluje tudi brez povezave.',
+  'more.retryingTitle': 'Čaka na ponovni poskus',
+  'more.retryingHint': 'Ti vnosi so na telefonu shranjeni in se pošiljajo znova. Spodaj je razlog zadnjega neuspeha.',
+  'more.attempts': 'Poskusov: {n}',
+  'photo.lostOnDevice': 'Fotografije ni več na telefonu (shranjena je bila s starejšo različico aplikacije). Zavrzite ta vnos in fotografirajte znova.',
 } as const;
 
 export type TranslationKey = keyof typeof SL;

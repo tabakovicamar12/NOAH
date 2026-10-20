@@ -356,7 +356,11 @@ export interface PhotoCategoryCount {
 }
 
 /** Normalised error every API failure is mapped to by the error interceptor. */
-export type ApiErrorKind = 'NETWORK' | 'TIMEOUT' | 'UNAUTHORIZED' | 'VALIDATION' | 'CONFLICT' | 'NOT_FOUND' | 'SERVER';
+/**
+ * UNAUTHORIZED (401): the session is gone, log in again. FORBIDDEN (403): this one request is not allowed
+ * (another crew's order, out of scope); the session is fine and everything else keeps syncing.
+ */
+export type ApiErrorKind = 'NETWORK' | 'TIMEOUT' | 'UNAUTHORIZED' | 'FORBIDDEN' | 'VALIDATION' | 'CONFLICT' | 'NOT_FOUND' | 'SERVER';
 
 export class ApiError extends Error {
   constructor(

@@ -4,6 +4,7 @@ import { SessionStore } from '../auth/session.store';
 import { DatabaseService } from '../db/database.service';
 import { liveSignal } from '../db/live';
 import { ApiClient } from '../http/api-client.service';
+import { ApiError } from '../models/api.models';
 import { toApiError } from '../http/interceptors';
 import { I18nService } from '../i18n/i18n.service';
 import type { SyncPhase, SyncQueueItem } from '../models/sync.models';
@@ -53,6 +54,8 @@ export class SyncEngine {
   );
   readonly pendingCount = computed(() => this.queue().filter((i) => i.state === 'PENDING').length);
   readonly failedItems = computed(() => this.queue().filter((i) => i.state === 'FAILED'));
+  /** Still being retried, but the last try failed: shown with its reason so nobody has to guess why it waits. */
+  readonly retryingItems = computed(() => this.queue().filter((i) => i.state === 'PENDING' && i.attempts > 0 && !!i.lastError));
   readonly unsyncedCount = computed(() => this.queue().length);
 
   private running = false;
@@ -297,8 +300,17 @@ export class SyncEngine {
         return this.api.createLog(op.payload, item.opId);
       case 'PHOTO_UPLOAD': {
         const photo = await this.db.photos.get(op.payload.id);
-        if (!photo?.blob) throw new Error('Photo binary missing on device');
-        return this.api.uploadPhoto(op.payload, photo.blob, item.opId);
+        // Read the bytes before sending: a file the phone lost (older iOS versions kept photos as Blobs that
+        // could vanish) is reported as lost, instead of failing as a network error and retrying forever.
+        let bytes: ArrayBuffer;
+        try {
+          const stored = photo?.blob ?? null;
+          if (!stored) throw new Error('missing');
+          bytes = stored instanceof Blob ? await stored.arrayBuffer() : stored;
+        } catch {
+          throw new ApiError('VALIDATION', 0, this.i18n.t('photo.lostOnDevice'));
+        }
+        return this.api.uploadPhoto(op.payload, new Blob([bytes], { type: 'image/jpeg' }), item.opId);
       }
       case 'SUMMARY_UPSERT':
         return this.api.upsertSummary(op.payload, item.opId);

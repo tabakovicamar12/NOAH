@@ -61,15 +61,17 @@ export function toApiError(err: unknown): ApiError {
     const kind: ApiErrorKind =
       err.status === 0
         ? 'NETWORK'
-        : err.status === 401 || err.status === 403
+        : err.status === 401
           ? 'UNAUTHORIZED'
-          : err.status === 404
-            ? 'NOT_FOUND'
-            : err.status === 409
-              ? 'CONFLICT'
-              : err.status >= 400 && err.status < 500
-                ? 'VALIDATION'
-                : 'SERVER';
+          : err.status === 403
+            ? 'FORBIDDEN'
+            : err.status === 404
+              ? 'NOT_FOUND'
+              : err.status === 409
+                ? 'CONFLICT'
+                : err.status >= 400 && err.status < 500
+                  ? 'VALIDATION'
+                  : 'SERVER';
     const body: unknown = err.error;
     const message =
       body && typeof body === 'object' && 'message' in body && typeof body.message === 'string'

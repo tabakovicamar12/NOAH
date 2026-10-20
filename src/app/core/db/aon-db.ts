@@ -32,6 +32,26 @@ export interface LocalPhoto extends PhotoMeta {
   readonly thumb: Blob | null;
   readonly synced: SyncFlag;
 }
+
+/**
+ * Photo bytes as kept in IndexedDB. Raw bytes since this version: iOS Safari can lose Blobs stored in
+ * IndexedDB once the app is closed, and the upload then fails with nothing to retry. Rows saved by an older
+ * version may still hold a Blob.
+ */
+export type StoredBinary = ArrayBuffer | Blob;
+export interface StoredPhoto extends Omit<LocalPhoto, 'blob' | 'thumb'> {
+  readonly blob: StoredBinary | null;
+  readonly thumb: StoredBinary | null;
+}
+
+export function binaryToBlob(value: StoredBinary | null): Blob | null {
+  if (value == null) return null;
+  return value instanceof Blob ? value : new Blob([value], { type: 'image/jpeg' });
+}
+
+export function photoFromStore(row: StoredPhoto): LocalPhoto {
+  return { ...row, blob: binaryToBlob(row.blob), thumb: binaryToBlob(row.thumb) };
+}
 export interface LocalSummary extends DailySummary {
   readonly synced: SyncFlag;
 }
@@ -57,7 +77,7 @@ export class AonDatabase extends Dexie {
   workOrders!: EntityTable<LocalWorkOrder, 'id'>;
   timeEntries!: EntityTable<LocalTimeEntry, 'id'>;
   logs!: EntityTable<LocalLogEntry, 'id'>;
-  photos!: EntityTable<LocalPhoto, 'id'>;
+  photos!: EntityTable<StoredPhoto, 'id'>;
   summaries!: EntityTable<LocalSummary, 'id'>;
   authoredOrders!: EntityTable<LocalAuthoredOrder, 'id'>;
   syncQueue!: EntityTable<SyncQueueItem, 'seq'>;

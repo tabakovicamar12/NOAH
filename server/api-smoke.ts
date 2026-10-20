@@ -142,6 +142,36 @@ async function main(): Promise<void> {
   await call('POST', '/consents', worker, { version: CONSENT_VERSION, acceptedAt: Date.now() });
   const again = await call('POST', '/auth/login', null, { username: 'delavec', password: 'delavec-geslo-123', role: 'WORKER' });
   check('another device learns the notice was acknowledged', again.body?.consents?.notice?.version === CONSENT_VERSION);
+  // Photos: the bare JPEG with metadata in a header; the old multipart form still works; a broken form is a 400
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(2000).fill(7), 0xff, 0xd9]);
+  const photoMeta = (id: string) => ({
+    id, userId: 'u-w', workOrderId: o1.id, projectId: '', category: 'IN_PROGRESS', caption: 'Stena č. 6 – šivi', width: 10, height: 10,
+    createdAt: Date.now(), privacyConfirmed: true, maskCount: 0,
+  });
+  const rawId = crypto.randomUUID();
+  const raw = await app.request('/api/v1/photos', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${worker}`, 'Idempotency-Key': crypto.randomUUID(), 'Content-Type': 'image/jpeg',
+      'X-Photo-Meta': Buffer.from(JSON.stringify(photoMeta(rawId))).toString('base64url'),
+    },
+    body: jpeg,
+  });
+  check('a bare JPEG upload is stored', raw.status === 204, String(raw.status));
+  const form = new FormData();
+  form.append('meta', JSON.stringify(photoMeta(crypto.randomUUID())));
+  form.append('file', new Blob([jpeg], { type: 'image/jpeg' }), 'x.jpg');
+  const multi = await app.request('/api/v1/photos', { method: 'POST', headers: { Authorization: `Bearer ${worker}`, 'Idempotency-Key': crypto.randomUUID() }, body: form });
+  check('the old multipart upload still works', multi.status === 204, String(multi.status));
+  const broken = await app.request('/api/v1/photos', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${worker}`, 'Idempotency-Key': crypto.randomUUID(), 'Content-Type': 'multipart/form-data; boundary=x' },
+    body: 'nothing here',
+  });
+  check('an unreadable form is a 400, not a server error', broken.status === 400, String(broken.status));
+  const detail = await call('GET', `/manager/work-orders/${o1.id}`, admin);
+  check('the photo and its Slovenian caption arrive intact', (detail.body?.photos ?? []).some((ph: { id: string; caption: string }) => ph.id === rawId && ph.caption === 'Stena č. 6 – šivi'));
+
   // The desk's cheap "anything new?" moves with every recorded entry
   const before = (await call('GET', '/manager/changes', admin)).body?.changedAt ?? 0;
   await log(o2.id, 1, null);
