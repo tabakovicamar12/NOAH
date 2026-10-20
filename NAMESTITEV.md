@@ -31,7 +31,17 @@ DATABASE_URL=postgresql://postgres.xxxx:GESLO@aws-0-eu-central-1.pooler.supabase
 SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=sb_secret_...
 JWT_SECRET=          # ustvarite z ukazom spodaj
+
+# Podatki o delodajalcu (upravljavcu): v obvestilu o zasebnosti in na natisnjenih poročilih
+ORG_NAME=NOAH d.o.o.
+ORG_ADDRESS=Ulica 1, 2000 Maribor
+ORG_TAX_ID=SI12345678
+ORG_PRIVACY_CONTACT=zasebnost@noah.si
+ORG_DPO=                 # pooblaščena oseba za varstvo podatkov, če je imenovana
+PHOTO_RETENTION_DAYS=    # npr. 730; prazno = fotografije se ne brišejo samodejno
 ```
+
+Vrednosti `ORG_*` zgoraj so samo primer; vpišite prave podatke podjetja. Dokler `ORG_NAME` ni nastavljen, je obvestilo o zasebnosti označeno kot vzorec.
 
 Naključni `JWT_SECRET`:
 
@@ -103,6 +113,7 @@ Odprite **http://localhost:8787**: to je točno to, kar bo tekel strežnik na Re
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `JWT_SECRET`
+   - `ORG_NAME`, `ORG_ADDRESS`, `ORG_TAX_ID`, `ORG_PRIVACY_CONTACT`, po potrebi `ORG_DPO` in `PHOTO_RETENTION_DAYS` (glej korak 2)
 3. Migracije zaženite enkrat z vašega računalnika (korak 3); Vercel jih ne zaganja.
 4. **Deploy** in preverite `/api/v1/health`.
 
@@ -120,9 +131,9 @@ Odprite **http://localhost:8787**: to je točno to, kar bo tekel strežnik na Re
 
 ## 8. GDPR: kaj mora urediti upravljavec (podjetje, ki uporablja AON)
 
-- [ ] **Obvestilo o zasebnosti** (`/privacy`) je vzorec. Pred uporabo s pravimi podatki ga upravljavec dopolni s svojimi podatki in kontaktom, pregleda pa ga pravnik.
+- [ ] **Podatki o upravljavcu:** nastavite `ORG_NAME`, `ORG_ADDRESS`, `ORG_TAX_ID`, `ORG_PRIVACY_CONTACT` (in `ORG_DPO`, če ga imate). Prikažejo se v obvestilu o zasebnosti (`/privacy`) in na vseh natisnjenih poročilih ter evidencah. Besedilo obvestila naj pred uporabo pregleda pravnik ali pooblaščena oseba.
 - [ ] **Pogodbe o obdelavi (DPA)** s Supabase, Render ali Vercel (vsi jih ponujajo v nastavitvah ali na spletni strani).
-- [ ] **Roki hrambe** fotografij in poročil (evidence delovnega časa po delovni zakonodaji).
+- [ ] **Roki hrambe:** določite rok za fotografije (`PHOTO_RETENTION_DAYS`) in ukaz `npm run cli:prod -- purge-photos` zaganjajte redno (npr. enkrat na teden); `--dry-run` samo prešteje. Evidenc delovnega časa ukaz ne briše: njihovo hrambo določa delovna zakonodaja.
 - [ ] **Evidenca dejavnosti obdelave** in obvestilo zaposlenim.
 - [ ] Glasovni vnos uporablja razpoznavanje govora brskalnika (Google, Apple). To je navedeno v obvestilu in v soglasju, ki ga delavec da pred prvo uporabo in ga lahko prekliče v meniju *Več*.
 

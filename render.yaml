@@ -25,3 +25,15 @@ services:
         sync: false # Supabase → Project Settings → API Keys → service_role (secret)
       - key: SUPABASE_PHOTO_BUCKET
         value: photos
+      - key: ORG_NAME
+        sync: false # employer (data controller), e.g. NOAH d.o.o.
+      - key: ORG_ADDRESS
+        sync: false
+      - key: ORG_TAX_ID
+        sync: false
+      - key: ORG_PRIVACY_CONTACT
+        sync: false # e-mail for privacy requests
+      - key: ORG_DPO
+        sync: false # optional
+      - key: PHOTO_RETENTION_DAYS
+        sync: false # optional, e.g. 730
