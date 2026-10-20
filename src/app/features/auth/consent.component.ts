@@ -13,7 +13,7 @@ import { LogoComponent } from '../../shared/ui/logo.component';
 
 /**
  * First-login privacy notice (GDPR Art. 13). Work records rest on law and contract, so the worker
- * acknowledges the notice rather than consenting; optional voice input asks for its own consent.
+ * acknowledges the notice rather than consenting.
  */
 @Component({
   selector: 'aon-consent',
@@ -79,7 +79,6 @@ export class ConsentComponent {
     { key: 'consent.p1', icon: 'clock' },
     { key: 'consent.p2', icon: 'clipboard' },
     { key: 'consent.p3', icon: 'camera' },
-    { key: 'consent.p4', icon: 'mic' },
     { key: 'consent.p5', icon: 'shield' },
   ];
 

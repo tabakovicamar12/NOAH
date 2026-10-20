@@ -5,7 +5,6 @@ import { SessionStore } from '../../core/auth/session.store';
 import { I18nService } from '../../core/i18n/i18n.service';
 import type { SyncOperationType } from '../../core/models/sync.models';
 import { NetworkStatusService } from '../../core/network/network-status.service';
-import { PrivacyPrefsService } from '../../core/privacy/privacy-prefs.service';
 import { DEMO_MODE } from '../../core/ui/demo-mode';
 import { SyncEngine } from '../../core/sync/sync-engine.service';
 import { ToastService } from '../../core/ui/toast.service';
@@ -93,18 +92,6 @@ import { initialsOf } from '../manager/person';
           </button>
         </section>
 
-        <section class="w-card" aria-labelledby="voice-title">
-          <h2 id="voice-title" class="w-h2 is-start"><aon-icon name="mic" [size]="17" />{{ i18n.t('voice.settingTitle') }}</h2>
-          @if (prefs.voiceConsent(); as c) {
-            <p class="w-small mt-1">{{ i18n.t('voice.settingOn', { date: i18n.date(c.at) }) }}</p>
-            <button type="button" class="w-btn w-btn-line mt-3" (click)="withdrawVoice()">
-              <aon-icon name="x" [size]="18" />{{ i18n.t('voice.withdraw') }}
-            </button>
-          } @else {
-            <p class="w-small w-muted mt-1">{{ i18n.t('voice.settingOff') }}</p>
-          }
-        </section>
-
         <!-- Offline simulation is a presentation aid; a real crew should never switch its sync off by accident. -->
         @if (demo || network.simulatedOffline()) {
           <label class="w-card sim">
@@ -176,14 +163,8 @@ export class MoreComponent {
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
   protected readonly busy = signal(false);
-  protected readonly prefs = inject(PrivacyPrefsService);
   protected readonly demo = DEMO_MODE;
   protected readonly initials = computed(() => initialsOf(this.session.user()?.displayName ?? ''));
-
-  protected async withdrawVoice(): Promise<void> {
-    await this.safely(() => this.prefs.withdrawVoice());
-    this.toast.success(this.i18n.t('voice.withdrawn'));
-  }
 
   protected opKey(type: SyncOperationType): `opType.${SyncOperationType}` {
     return `opType.${type}`;

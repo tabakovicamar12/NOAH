@@ -77,7 +77,6 @@ export class PrivacyPolicyComponent {
     { title: 'privacy.notTitle', body: 'privacy.not' },
     { title: 'privacy.whyTitle', body: 'privacy.why' },
     { title: 'privacy.cameraTitle', body: 'privacy.camera' },
-    { title: 'privacy.voiceTitle', body: 'privacy.voice' },
     { title: 'privacy.deviceTitle', body: 'privacy.device' },
     { title: 'privacy.processorsTitle', body: 'privacy.processors' },
     { title: 'privacy.retentionTitle', body: 'privacy.retention' },

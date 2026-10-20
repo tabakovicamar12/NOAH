@@ -8,7 +8,6 @@ import { formatDuration } from '../../core/util/util';
 import { HoldButtonComponent } from '../../shared/ui/hold-button.component';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { ReportStatusComponent } from '../../shared/ui/report-status.component';
-import { VoiceButtonComponent } from '../../shared/ui/voice-button.component';
 import { WorkerStore, type ReportDraft } from './data/worker-store.service';
 import { workflowMessage } from './data/workflow-messages';
 
@@ -26,7 +25,7 @@ function toTimeInput(ms: number): string {
  */
 @Component({
   selector: 'aon-day-report',
-  imports: [RouterLink, HoldButtonComponent, IconComponent, ReportStatusComponent, VoiceButtonComponent],
+  imports: [RouterLink, HoldButtonComponent, IconComponent, ReportStatusComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="w-page">
@@ -188,9 +187,6 @@ function toTimeInput(ms: number): string {
                     <span class="mt-0.5 block whitespace-pre-line leading-snug">{{ line.workDone || i18n.t('common.none') }}</span>
                   }
                 </label>
-                @if (editable()) {
-                  <aon-voice-button class="voice mt-2" [compact]="true" (text)="appendWorkDone(line, $event)" />
-                }
 
                 <div class="mt-3">
                   <p class="w-label">{{ i18n.t('day.materialsUsed') }}</p>
@@ -256,7 +252,6 @@ function toTimeInput(ms: number): string {
                 [value]="draft().comment"
                 (input)="patch({ comment: $any($event.target).value })"
               ></textarea>
-              <aon-voice-button class="voice mt-2" [compact]="true" (text)="appendComment($event)" />
               <p class="w-small w-muted mt-2 flex items-center gap-1.5" aria-live="polite">
                 <aon-icon [name]="saving() ? 'refresh' : 'check'" [size]="14" />{{ saving() ? i18n.t('day.savingDraft') : i18n.t('day.draftSaved') }}
               </p>
@@ -377,9 +372,6 @@ function toTimeInput(ms: number): string {
       grid-template-columns: minmax(0, 1fr) 4.75rem 3.25rem;
       gap: 0.35rem;
     }
-    .voice {
-      max-width: 11rem;
-    }
   `,
 })
 export class DayReportComponent {
@@ -464,16 +456,6 @@ export class DayReportComponent {
 
   protected setWorkDone(orderId: string, text: string): void {
     this.patch({ workDone: { ...this.draft().workDone, [orderId]: text } });
-  }
-
-  protected appendWorkDone(line: ReportOrderLine, phrase: string): void {
-    const current = this.workDone(line).trimEnd();
-    this.setWorkDone(line.workOrderId, current ? `${current} ${phrase}` : phrase);
-  }
-
-  protected appendComment(phrase: string): void {
-    const current = this.draft().comment.trimEnd();
-    this.patch({ comment: current ? `${current} ${phrase}` : phrase });
   }
 
   protected setMaterial(line: ReportOrderLine, index: number, change: Partial<Material>): void {

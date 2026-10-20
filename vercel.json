@@ -27,8 +27,6 @@
         { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" }
       ]
     },
-    { "source": "/models/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=2592000" }] },
-    { "source": "/ort/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=2592000" }] },
     { "source": "/ngsw-worker.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
     { "source": "/ngsw.json", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
     { "source": "/index.html", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },

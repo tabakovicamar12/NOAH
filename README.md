@@ -68,8 +68,5 @@ Aplikacija uporablja samo odprtokodne knjižnice z dovoljujočimi licencami. Cel
 | Lucide (ikone) | ISC |
 | postgres (postgres.js) | Unlicense |
 | Pisava Archivo (The Archivo Project Authors) | SIL Open Font License 1.1, `public/fonts/OFL.txt` |
-| Transformers.js (Hugging Face), ONNX Runtime Web (Microsoft) | Apache-2.0, MIT |
-| Model za razpoznavanje govora `blko/whisper-base-sl-artur-full-ft` (na podlagi OpenAI Whisper base, MIT) | Apache-2.0, `public/models/whisper-base-sl/LICENSE`; za brskalnik pretvorjen v ONNX in kvantiziran na 8 bitov |
-| Korpus ARTUR 1.0 (Verdonik in drugi, CLARIN.SI, http://hdl.handle.net/11356/1776), na katerem je model naučen | CC BY-SA 4.0, navedba v `public/models/whisper-base-sl/NOTICE` |
 
 Ikona aplikacije in logotip AON sta izdelana posebej za ta projekt. Demo podatki (imena, projekti, objekti) so izmišljeni.

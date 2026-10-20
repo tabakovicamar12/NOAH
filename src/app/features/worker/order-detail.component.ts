@@ -10,7 +10,6 @@ import { formatClock } from '../../core/util/util';
 import { hoursLabel } from '../../shared/ui/format';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { progressRatio } from '../../shared/ui/tag-style';
-import { VoiceButtonComponent } from '../../shared/ui/voice-button.component';
 import { WorkerStore } from './data/worker-store.service';
 import { orderElapsedMs, workflowMessage } from './data/workflow-messages';
 import { OrderPhotosComponent } from './photo/order-photos.component';
@@ -30,7 +29,7 @@ type NoteMode = 'NOTE' | 'ISSUE';
 
 @Component({
   selector: 'aon-order-detail',
-  imports: [FormsModule, RouterLink, IconComponent, OrderPhotosComponent, VoiceButtonComponent],
+  imports: [FormsModule, RouterLink, IconComponent, OrderPhotosComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="w-page">
@@ -200,7 +199,6 @@ type NoteMode = 'NOTE' | 'ISSUE';
                 ></textarea>
               </label>
               <div class="note-actions mt-2">
-                <aon-voice-button (text)="appendNote($event)" />
                 <button type="button" class="w-btn" [class]="mode() === 'ISSUE' ? 'w-btn-bad' : 'w-btn-dark'" [disabled]="busy()" (click)="saveNote()">
                   @if (mode() === 'ISSUE') {
                     <aon-icon name="alert" [size]="18" />{{ i18n.t('order.reportIssue') }}
@@ -378,8 +376,6 @@ type NoteMode = 'NOTE' | 'ISSUE';
     }
     .note-actions {
       display: grid;
-      grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-      align-items: start;
       gap: 0.5rem;
     }
     .log-row {
@@ -684,11 +680,6 @@ export class OrderDetailComponent {
       return Promise.resolve();
     }
     return this.addQuantity(q).then(() => this.custom.set(null));
-  }
-
-  protected appendNote(phrase: string): void {
-    const current = this.noteText().trimEnd();
-    this.noteText.set(current ? `${current} ${phrase}` : phrase);
   }
 
   protected saveNote(): Promise<void> {

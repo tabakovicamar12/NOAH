@@ -3,7 +3,7 @@ import { DatabaseService } from '../db/database.service';
 import { ApiClient } from '../http/api-client.service';
 import { ApiError } from '../models/api.models';
 import type { LoginConsents, LoginSide } from '../models/api.models';
-import { CONSENT_VERSION, VOICE_CONSENT_VERSION, type User } from '../models/domain.models';
+import { CONSENT_VERSION, type User } from '../models/domain.models';
 import { NetworkStatusService } from '../network/network-status.service';
 import { SessionStore } from './session.store';
 
@@ -63,22 +63,13 @@ export class AuthService {
     }
   }
 
-  /**
-   * Takes over what the account acknowledged on another device, so the notice is not shown again.
-   * A voice decision still waiting in this device's queue is newer than the server's and wins.
-   */
+  /** Takes over what the account acknowledged on another device, so the notice is not shown again. */
   private async adoptConsents(userId: string, consents: LoginConsents | undefined): Promise<void> {
     if (!consents) return;
     try {
-      const pending = await this.db.syncQueue.where('userId').equals(userId).filter((q) => q.op.type === 'CONSENT').toArray();
       const notice = consents.notice;
       if (notice?.version === CONSENT_VERSION && !(await this.db.consents.get(userId))) {
         await this.db.consents.put({ userId, version: notice.version, acceptedAt: notice.acceptedAt });
-      }
-      const voice = consents.voice;
-      if (voice && !pending.some((q) => q.entityKey === `consent:${userId}:voice`)) {
-        if (voice.version === VOICE_CONSENT_VERSION) await this.db.kv.put({ key: `voice-consent:${userId}`, value: { version: voice.version, at: voice.acceptedAt } });
-        else await this.db.kv.delete(`voice-consent:${userId}`);
       }
     } catch (err: unknown) {
       // Worst case the notice is shown once more.
