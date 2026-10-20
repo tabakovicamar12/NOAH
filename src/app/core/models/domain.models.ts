@@ -213,7 +213,8 @@ export interface ConsentRecord {
 export const CONSENT_VERSION = '2026-10-2';
 
 /** Version of the optional voice-input consent (the only processing in AON that rests on consent). */
-export const VOICE_CONSENT_VERSION = 'voice-2026-10-1';
+/** Bumped to -2 when speech moved from the browsers' recognition (Google, Apple) to the on-device model. */
+export const VOICE_CONSENT_VERSION = 'voice-2026-10-2';
 
 /** Display label for an order number that the server has not issued yet. */
 export function orderLabel(code: string | null, draftLabel: string): string {

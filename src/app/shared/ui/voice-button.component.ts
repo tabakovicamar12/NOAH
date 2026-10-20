@@ -3,7 +3,7 @@ import { I18nService } from '../../core/i18n/i18n.service';
 import type { TranslationKey } from '../../core/i18n/sl';
 import { NetworkStatusService } from '../../core/network/network-status.service';
 import { PrivacyPrefsService } from '../../core/privacy/privacy-prefs.service';
-import { SpeechService, type SpeechFailure } from '../../core/privacy/speech.service';
+import { MODEL_SIZE_MB, SpeechService, type SpeechFailure } from '../../core/privacy/speech.service';
 import { ToastService } from '../../core/ui/toast.service';
 import { IconComponent } from './icon.component';
 import { NoticeSheetComponent, type NoticePoint } from './notice-sheet.component';
@@ -12,7 +12,7 @@ const FAILURE_TEXT: Readonly<Record<SpeechFailure, TranslationKey>> = {
   UNSUPPORTED: 'voice.unsupported',
   DENIED: 'voice.denied',
   NO_SPEECH: 'voice.noSpeech',
-  NETWORK: 'voice.offline',
+  MODEL: 'voice.modelFailed',
   FAILED: 'voice.failed',
 };
 
@@ -39,13 +39,22 @@ const FAILURE_TEXT: Readonly<Record<SpeechFailure, TranslationKey>> = {
         {{ i18n.t('voice.stop') }}
       </button>
       <p class="w-muted w-small mt-1.5 min-h-6" aria-live="polite">
-        {{ speech.interim() || i18n.t('voice.listening') }}
+        {{ i18n.t('voice.recording', { s: speech.seconds() }) }}
       </p>
+    } @else if (mine() && speech.transcribing()) {
+      <button type="button" class="w-btn w-btn-line" disabled>
+        <aon-icon name="refresh" [size]="18" class="animate-spin" />
+        @if (speech.modelState() === 'DOWNLOADING') {
+          {{ i18n.t('voice.downloading', { p: speech.modelPercent() }) }}
+        } @else {
+          {{ i18n.t('voice.transcribing') }}
+        }
+      </button>
     } @else {
       <button
         type="button"
         class="w-btn w-btn-line"
-        [disabled]="!speech.supported || !network.online() || (speech.listening() && !mine())"
+        [disabled]="!!unavailable() || ((speech.listening() || speech.transcribing()) && !mine())"
         [attr.aria-describedby]="hintId"
         (click)="start()"
       >
@@ -67,6 +76,17 @@ const FAILURE_TEXT: Readonly<Record<SpeechFailure, TranslationKey>> = {
         (declined)="asking.set(false)"
       />
     }
+    @if (askingDownload()) {
+      <aon-notice-sheet
+        [heading]="i18n.t('voice.modelTitle')"
+        icon="mic"
+        [points]="downloadPoints()"
+        [acceptLabel]="i18n.t('voice.modelAccept')"
+        [declineLabel]="i18n.t('voice.consentDecline')"
+        (accepted)="downloadAccepted()"
+        (declined)="askingDownload.set(false)"
+      />
+    }
   `,
 })
 export class VoiceButtonComponent {
@@ -82,11 +102,17 @@ export class VoiceButtonComponent {
   private static nextId = 0;
   protected readonly hintId = `aon-voice-hint-${VoiceButtonComponent.nextId++}`;
   protected readonly asking = signal(false);
+  protected readonly askingDownload = signal(false);
   /** Whether the running session belongs to this button (several fields can have one). */
   protected readonly mine = signal(false);
 
   protected readonly unavailable = computed<TranslationKey | null>(() =>
-    !this.speech.supported ? 'voice.unsupported' : !this.network.online() ? 'voice.offline' : null,
+    !this.speech.supported
+      ? 'voice.unsupported'
+      : // Offline, the on-device model still works, but only once it has been downloaded.
+        !this.network.online() && this.speech.modelState() !== 'READY'
+        ? 'voice.offlineNoModel'
+        : null,
   );
 
   protected readonly consentPoints = computed<readonly NoticePoint[]>(() => [
@@ -94,6 +120,12 @@ export class VoiceButtonComponent {
     { icon: 'globe', text: this.i18n.t('voice.consentP2') },
     { icon: 'shield', text: this.i18n.t('voice.consentP3') },
     { icon: 'x', text: this.i18n.t('voice.consentP4') },
+  ]);
+
+  protected readonly downloadPoints = computed<readonly NoticePoint[]>(() => [
+    { icon: 'shield', text: this.i18n.t('voice.modelP1') },
+    { icon: 'wifi', text: this.i18n.t('voice.modelP2', { mb: MODEL_SIZE_MB }) },
+    { icon: 'cloud-off', text: this.i18n.t('voice.modelP3') },
   ]);
 
   constructor() {
@@ -107,6 +139,21 @@ export class VoiceButtonComponent {
       this.asking.set(true);
       return;
     }
+    if (this.needsDownload()) {
+      this.askingDownload.set(true);
+      return;
+    }
+    this.listen();
+  }
+
+  /** The on-device model is about 100 MB: the worker agrees to the download once, ideally on Wi-Fi. */
+  private needsDownload(): boolean {
+    return this.speech.supported && this.speech.modelState() === 'NONE';
+  }
+
+  /** Recording starts at once; the model downloads meanwhile and transcribes when the worker stops. */
+  protected downloadAccepted(): void {
+    this.askingDownload.set(false);
     this.listen();
   }
 
@@ -118,6 +165,10 @@ export class VoiceButtonComponent {
   protected consentGiven(): void {
     this.asking.set(false);
     void this.prefs.grantVoice();
+    if (this.needsDownload()) {
+      this.askingDownload.set(true);
+      return;
+    }
     this.listen();
   }
 
