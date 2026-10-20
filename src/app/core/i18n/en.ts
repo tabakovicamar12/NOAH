@@ -993,4 +993,6 @@ export const EN: Dictionary = {
   'more.retryingHint': 'These entries are saved on the phone and are being sent again. The reason for the last failure is below.',
   'more.attempts': 'Attempts: {n}',
   'photo.lostOnDevice': 'The photo is no longer on the phone (it was saved by an older version of the app). Discard this item and take the photo again.',
+  'mgr.dayFilterNote': 'Showing the orders that concern {date}: work, quantities, notes, problems, photos, planned start or deadline. Order status is as of today.',
+  'mgr.backToToday': 'Back to today',
 };

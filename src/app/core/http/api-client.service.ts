@@ -162,7 +162,8 @@ export class ApiClient {
   }
 
   managerOverview(date: IsoDate): Promise<ManagerOverviewResponse> {
-    const params = new HttpParams().set('date', date);
+    // `from`: the day's local midnight on this device, so "that day" means the Slovenian day, not the server's.
+    const params = new HttpParams().set('date', date).set('from', String(new Date(`${date}T00:00:00`).getTime()));
     return firstValueFrom(this.http.get<ManagerOverviewResponse>(`${this.base}/manager/overview`, { params }));
   }
 

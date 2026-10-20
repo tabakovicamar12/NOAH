@@ -834,9 +834,16 @@ async function overview(db: MockServerDb, date: IsoDate): Promise<ManagerOvervie
 
   const orderRows: OrderOverview[] = orders.map((o) => {
     const segs = entries.filter((e) => e.kind === 'ORDER' && e.workOrderId === o.id);
+    const onDay = (at: number): boolean => toIsoDate(at) === date;
     return {
       order: publicOrder(o),
       minutesToday: segs.filter((e) => e.date === date).reduce((s, e) => s + entryMinutes(e, now), 0),
+      activeOnDate:
+        segs.some((e) => e.date === date) ||
+        logs.some((l) => l.workOrderId === o.id && onDay(l.createdAt)) ||
+        photos.some((p) => p.workOrderId === o.id && onDay(p.createdAt)) ||
+        o.date === date ||
+        o.dueDate === date,
       minutesTotal: segs.reduce((s, e) => s + entryMinutes(e, now), 0),
       photoCount: photos.filter((p) => p.workOrderId === o.id).length,
       openIssues: o.status === 'ISSUE' ? Math.max(1, logs.filter((l) => l.workOrderId === o.id && l.kind === 'ISSUE').length) : 0,

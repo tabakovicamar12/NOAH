@@ -763,10 +763,13 @@ export class ReportComponent {
         a.user.displayName.localeCompare(b.user.displayName),
     ),
   );
-  /** Orders that mattered that day: open ones, plus completed ones worked on that day. */
+  /**
+   * Orders that mattered that day. Today: every open order plus completed ones worked on today. Another day:
+   * only orders worked on, written to or photographed that day, or planned to start or due that day.
+   */
   protected readonly orders = computed(() =>
     [...(this.data()?.orders ?? [])]
-      .filter((o) => o.order.published && (o.order.status !== 'COMPLETED' || o.minutesToday > 0))
+      .filter((o) => o.order.published && (this.store.isToday() ? o.order.status !== 'COMPLETED' || o.minutesToday > 0 : o.activeOnDate))
       .sort((a, b) => STATUS_RANK[a.order.status] - STATUS_RANK[b.order.status] || compareCodes(a.order.code, b.order.code)),
   );
   protected readonly totals = computed(() => {

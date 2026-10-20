@@ -674,7 +674,10 @@ export function createApp(config: ServerConfig): Hono<Env> {
   api.get('/manager/overview', deskOnly, async (c) => {
     const date = requireDate(c.req.query('date') ?? today(), 'date');
     const db = c.get('db');
-    return c.json(await overview(db, date, await scopeOf(db, c.get('me'))));
+    // The device's local midnight for that day; without it, the server's own midnight.
+    const fromRaw = Number(c.req.query('from'));
+    const from = Number.isFinite(fromRaw) && fromRaw > 0 ? fromRaw : new Date(`${date}T00:00:00`).getTime();
+    return c.json(await overview(db, date, await scopeOf(db, c.get('me')), from));
   });
 
   api.get('/manager/hours', deskOnly, async (c) => {
@@ -1081,14 +1084,24 @@ async function hours(db: Db, month: string, userIds: readonly string[] | null): 
   };
 }
 
-async function overview(db: Db, date: IsoDate, scope: Scope): Promise<ManagerOverviewResponse> {
+async function overview(db: Db, date: IsoDate, scope: Scope, dayStart: number): Promise<ManagerOverviewResponse> {
+  // 26 hours covers the days the clocks change.
+  const dayEnd = dayStart + 26 * 3_600_000;
   const now = Date.now();
   const recent = now - 30 * DAY_MS;
   const [projectRows, siteRows, allWorkerRows, allOrders, allDayEntriesRaw, allSummaries] = await Promise.all([
     db.query(`select * from projects where active order by code`),
     db.query(`${SITE_SELECT} where s.active order by p.code, s.name`),
     db.query(`select * from users where role = 'WORKER' and active order by display_name`),
-    loadOrders(db, `where o.status <> 'COMPLETED' or o.updated_at > $1 or exists (select 1 from time_entries t where t.work_order_id = o.id and t.date = $2) order by o.created_at`, [recent, date]),
+    loadOrders(
+      db,
+      `where o.status <> 'COMPLETED' or o.updated_at > $1 or o.date = $2 or o.due_date = $2
+         or exists (select 1 from time_entries t where t.work_order_id = o.id and t.date = $2)
+         or exists (select 1 from logs l where l.work_order_id = o.id and l.created_at >= $3 and l.created_at < $4)
+         or exists (select 1 from photos f where f.work_order_id = o.id and f.created_at >= $3 and f.created_at < $4)
+       order by o.created_at`,
+      [recent, date, dayStart, dayEnd],
+    ),
     db.query(`select * from time_entries where date = $1`, [date]),
     db.query(`select * from daily_summaries where date = $1`, [date]),
   ]);
@@ -1109,13 +1122,19 @@ async function overview(db: Db, date: IsoDate, scope: Scope): Promise<ManagerOve
   const dayEntriesRaw = scope.all ? allDayEntriesRaw : allDayEntriesRaw.filter((r) => visibleWorkers.has(String(r['user_id'])));
   const summaries = scope.all ? allSummaries : allSummaries.filter((r) => visibleWorkers.has(String(r['user_id'])));
   const orderIds = orders.map((o) => o.id);
-  const [orderEntriesRaw, photoCounts, issueCounts] = orderIds.length
+  const [orderEntriesRaw, photoCounts, issueCounts, touchedRows] = orderIds.length
     ? await Promise.all([
         db.query(`select * from time_entries where work_order_id = any($1::text[])`, [orderIds]),
         db.query(`select work_order_id, count(*)::int as n from photos where work_order_id = any($1::text[]) group by work_order_id`, [orderIds]),
         db.query(`select work_order_id, count(*)::int as n from logs where kind = 'ISSUE' and work_order_id = any($1::text[]) group by work_order_id`, [orderIds]),
+        db.query(
+          `select work_order_id from logs where work_order_id = any($1::text[]) and created_at >= $2 and created_at < $3
+           union select work_order_id from photos where work_order_id = any($1::text[]) and created_at >= $2 and created_at < $3`,
+          [orderIds, dayStart, dayEnd],
+        ),
       ])
-    : [[], [], []];
+    : [[], [], [], []];
+  const touched = new Set(touchedRows.map((r) => String(r['work_order_id'])));
   const dayEntries = dayEntriesRaw.map(toTimeEntry);
   const orderEntries = orderEntriesRaw.map(toTimeEntry);
   const siteList = sites.map(toSite);
@@ -1153,9 +1172,11 @@ async function overview(db: Db, date: IsoDate, scope: Scope): Promise<ManagerOve
 
   const orderRows: OrderOverview[] = orders.map((o) => {
     const segs = orderEntries.filter((e) => e.kind === 'ORDER' && e.workOrderId === o.id);
+    const minutesToday = segs.filter((e) => e.date === date).reduce((s, e) => s + minutesBetween(e.startedAt, e.endedAt ?? now), 0);
     return {
       order: o,
-      minutesToday: segs.filter((e) => e.date === date).reduce((s, e) => s + minutesBetween(e.startedAt, e.endedAt ?? now), 0),
+      minutesToday,
+      activeOnDate: segs.some((e) => e.date === date) || touched.has(o.id) || o.date === date || o.dueDate === date,
       minutesTotal: segs.reduce((s, e) => s + minutesBetween(e.startedAt, e.endedAt ?? now), 0),
       photoCount: photosBy.get(o.id) ?? 0,
       openIssues: o.status === 'ISSUE' ? Math.max(1, issuesBy.get(o.id) ?? 0) : 0,

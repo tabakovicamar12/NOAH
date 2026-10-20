@@ -85,6 +85,13 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
             }
           </div>
 
+          @if (data() && !store.isToday()) {
+            <p class="day-note">
+              <aon-icon name="calendar" [size]="16" />
+              <span>{{ i18n.t('mgr.dayFilterNote', { date: i18n.dateShort(store.date()) }) }}</span>
+              <button type="button" class="day-today" (click)="toToday()">{{ i18n.t('mgr.backToToday') }}</button>
+            </p>
+          }
           @if (data()) {
             <div class="card">
               <table class="tbl">
@@ -291,6 +298,29 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
     </div>
   `,
   styles: `
+    .day-note {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.4rem 0.6rem;
+      margin: 0 0 0.75rem;
+      padding: 0.55rem 0.8rem;
+      border-radius: 0.6rem;
+      background: var(--color-gold-tint);
+      font-size: 0.9rem;
+      line-height: 1.35;
+    }
+    .day-note > span {
+      flex: 1 1 14rem;
+    }
+    .day-today {
+      min-height: 2.25rem;
+      padding: 0 0.8rem;
+      border: 1px solid var(--color-line-strong);
+      border-radius: 0.5rem;
+      background: #fff;
+      font-weight: 600;
+    }
     :host {
       display: block;
       --insp-w: 20.7rem;
@@ -1027,6 +1057,7 @@ export class OverviewComponent implements OnInit {
         minutesTotal: 0,
         photoCount: 0,
         openIssues: 0,
+        activeOnDate: p.date === this.store.date() || p.dueDate === this.store.date(),
         pending: true,
         crewNames,
       });
@@ -1036,12 +1067,17 @@ export class OverviewComponent implements OnInit {
 
   private readonly words = computed(() => this.store.query().trim().toLocaleLowerCase().split(/\s+/).filter(Boolean));
 
-  /** Rows inside the project or object scope that match the search, before the status filter. */
+  /**
+   * Rows inside the project or object scope that match the search, before the status filter. Today shows the
+   * whole working list (every open order); any other day only the orders that concern that day.
+   */
   private readonly scopedRows = computed(() => {
     const site = this.site();
     const project = this.project();
     const words = this.words();
+    const pastDay = !this.store.isToday();
     return this.allRows().filter((r) => {
+      if (pastDay && !r.activeOnDate) return false;
       if (site && r.order.siteId !== site) return false;
       if (!site && project && r.order.projectId !== project) return false;
       const hay = `${r.order.code ?? ''} ${r.order.title} ${r.crewNames.join(' ')} ${r.order.location} ${r.order.siteName}`.toLocaleLowerCase();
@@ -1179,6 +1215,11 @@ export class OverviewComponent implements OnInit {
       e.preventDefault();
       this.searchEl()?.nativeElement.focus();
     }
+  }
+
+  protected toToday(): void {
+    this.panel.set(null);
+    this.store.setDate(toIsoDate());
   }
 
   protected onDate(event: Event): void {

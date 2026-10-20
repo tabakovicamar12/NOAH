@@ -118,6 +118,12 @@ async function main(): Promise<void> {
   await entry('SHIFT', at(18), null);
   check('a report with an open shift is refused', (await call('PUT', `/daily-summaries/${sumId}`, worker, report)).status === 409);
 
+  // A past day lists only the orders that concern it
+  const pastDay = (await call('GET', `/manager/overview?date=${day}&from=${at(0)}`, admin)).body;
+  const flag = (id: string): boolean | undefined => pastDay?.orders?.find((r: { order: { id: string }; activeOnDate: boolean }) => r.order.id === id)?.activeOnDate;
+  check('an order worked on that day is active on it', flag(o1.id) === true, String(flag(o1.id)));
+  check('an order untouched that day is not', flag(o3.id) === false, String(flag(o3.id)));
+
   // ZAČNI DELO on a chosen object
   const workerOrders = await call('GET', '/worker/orders', worker);
   check('the worker gets the objects to choose from', (workerOrders.body?.sites ?? []).some((s: { id: string }) => s.id === s1.body.id));

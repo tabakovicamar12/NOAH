@@ -283,6 +283,11 @@ export interface OrderOverview {
   readonly minutesTotal: number;
   readonly photoCount: number;
   readonly openIssues: number;
+  /**
+   * The order concerns the requested day: time, a quantity, a note, a problem or a photo was recorded on it
+   * that day, or the day is its planned start or deadline. The desk lists only these for a day in the past.
+   */
+  readonly activeOnDate: boolean;
 }
 
 export interface ManagerOverviewResponse {
