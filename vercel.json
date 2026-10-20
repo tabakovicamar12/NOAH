@@ -5,6 +5,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist/aon/browser",
   "regions": ["fra1"],
+  "git": { "deploymentEnabled": { "glasovni-vnos": false } },
   "functions": {
     "api/index.mjs": {
       "maxDuration": 30,
