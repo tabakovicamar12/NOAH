@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { SessionStore } from '../../../core/auth/session.store';
 import type { LocalLogEntry, LocalPhoto, LocalSummary, LocalTimeEntry, LocalWorkOrder } from '../../../core/db/aon-db';
 import { DatabaseService } from '../../../core/db/database.service';
@@ -308,6 +308,16 @@ export class WorkerStore {
   constructor() {
     this.sync.onDrained(() => this.refreshFromServer());
     this.network.reconnected$.subscribe(() => void this.refreshFromServer());
+    // New or changed orders from the office show up while the app is open, not only at the next start.
+    const refresh = (): void => {
+      if (document.visibilityState === 'visible') void this.refreshFromServer();
+    };
+    const timer = setInterval(refresh, 60_000);
+    document.addEventListener('visibilitychange', refresh);
+    inject(DestroyRef).onDestroy(() => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+    });
   }
 
   minutesOnOrder(orderId: string): number {

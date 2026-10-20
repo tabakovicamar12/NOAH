@@ -5,6 +5,8 @@ import { Observable, distinctUntilChanged, filter, firstValueFrom, map, pairwise
 import { environment } from '../../../environments/environment';
 
 const SIMULATE_KEY = 'aon.simulateOffline';
+/** How often the server is tried again after a failed request, while the phone still reports a network. */
+const UNREACHABLE_PROBE_MS = 5_000;
 
 /**
  * Single source of truth for connectivity. "Online" means all three hold:
@@ -32,7 +34,7 @@ export class NetworkStatusService {
     map(() => undefined),
   );
 
-  private heartbeatHandle: ReturnType<typeof setInterval> | null = null;
+  private heartbeatHandle: ReturnType<typeof setTimeout> | null = null;
   private probing = false;
 
   constructor() {
@@ -44,14 +46,21 @@ export class NetworkStatusService {
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
 
-    this.heartbeatHandle = setInterval(() => {
-      if (this.browserOnline() && !this.simulatedOffline()) void this.probe();
-    }, environment.heartbeatMs);
+    // While the server is unreachable the heartbeat runs every few seconds, so a returning signal is noticed
+    // at once; while all is well it stays slow to spare battery and data.
+    const beat = (): void => {
+      const delay = this.serverReachable() ? environment.heartbeatMs : UNREACHABLE_PROBE_MS;
+      this.heartbeatHandle = setTimeout(async () => {
+        if (this.browserOnline() && !this.simulatedOffline()) await this.probe();
+        beat();
+      }, delay);
+    };
+    beat();
 
     this.destroyRef.onDestroy(() => {
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
-      if (this.heartbeatHandle) clearInterval(this.heartbeatHandle);
+      if (this.heartbeatHandle) clearTimeout(this.heartbeatHandle);
     });
   }
 

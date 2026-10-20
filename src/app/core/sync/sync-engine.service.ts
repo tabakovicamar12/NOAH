@@ -14,13 +14,16 @@ import { MAX_TRANSIENT_ATTEMPTS, backoffMs } from './sync-queue';
 
 type DrainListener = () => Promise<void> | void;
 
-const PERIODIC_MS = 60_000;
+/** Retry interval while items wait; each retry still respects a running backoff. */
+const PERIODIC_MS = 15_000;
 
 /**
  * Offline-first sync engine.
  *
  * - Every user action is written to IndexedDB together with a queue item, in one transaction.
- * - The queue replays strictly FIFO (by auto-increment `seq`) whenever the app is online.
+ * - The queue replays FIFO (by auto-increment `seq`) whenever the app is online; photo uploads go after the
+ *   light entries, since nothing depends on them.
+ * - A fresh chance (signal back, app reopened, a new entry) clears any backoff, so nothing waits needlessly.
  * - Transient failures (network, timeout, 5xx) stop the run and back off exponentially: later ops may
  *   depend on the failed one, so the engine never skips ahead.
  * - Permanent failures (4xx) park the op as FAILED; only ops of the same entity are held behind it.
@@ -67,14 +70,14 @@ export class SyncEngine {
     this.network.reconnected$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       const n = this.unsyncedCount();
       if (n > 0) this.toast.show(this.i18n.t('net.backOnline', { n }));
-      void this.run();
+      void this.runFresh();
     });
 
     const periodic = setInterval(() => {
       if (this.pendingCount() > 0) void this.run();
     }, PERIODIC_MS);
     const onVisible = (): void => {
-      if (document.visibilityState === 'visible') void this.run();
+      if (document.visibilityState === 'visible') void this.runFresh();
     };
     document.addEventListener('visibilitychange', onVisible);
     this.destroyRef.onDestroy(() => {
@@ -92,13 +95,40 @@ export class SyncEngine {
     return () => this.drainListeners.delete(listener);
   }
 
-  /** Ask for a sync soon. Safe to call after every local write. */
+  /**
+   * Ask for a sync now. Safe to call after every local write. A new entry is a fresh chance: whatever waits
+   * behind an earlier failure is tried at once instead of sitting out its backoff.
+   */
   nudge(): void {
-    queueMicrotask(() => void this.run());
+    queueMicrotask(() => void this.runFresh());
   }
 
   async syncNow(): Promise<void> {
     await this.network.probe();
+    await this.runFresh();
+  }
+
+  /**
+   * Backoff protects a struggling server from a loop of retries; it must not hold entries back once the
+   * situation changed (signal back, app reopened, the worker did something new). Clears it, then runs.
+   */
+  private async runFresh(): Promise<void> {
+    const uid = this.userId();
+    if (uid) {
+      try {
+        await this.db.syncQueue
+          .where('userId')
+          .equals(uid)
+          .and((i) => i.state === 'PENDING' && i.nextAttemptAt > 0)
+          .modify({ nextAttemptAt: 0 });
+      } catch {
+        /* the run below still goes; at worst it waits out the old backoff */
+      }
+    }
+    if (this.backoffTimer) {
+      clearTimeout(this.backoffTimer);
+      this.backoffTimer = null;
+    }
     await this.run();
   }
 
@@ -214,19 +244,33 @@ export class SyncEngine {
     }
   }
 
+  /**
+   * Records go strictly in order, since a later one may depend on an earlier one. Photo uploads are the
+   * exception: nothing depends on them and they are slow on site signal, so they wait until the light
+   * entries (time, quantities, notes, statuses) are through.
+   */
   private pickNext(items: readonly SyncQueueItem[]): 'EMPTY' | 'BLOCKED' | { item: SyncQueueItem } | { waitUntil: number } {
     if (items.length === 0) return 'EMPTY';
     const blocked = new Set<string>();
     const now = Date.now();
+    let photo: SyncQueueItem | null = null;
+    let photoWait: number | null = null;
     for (const item of items) {
       if (item.state === 'FAILED') {
         blocked.add(item.entityKey);
         continue;
       }
       if (blocked.has(item.entityKey)) continue;
+      if (item.op.type === 'PHOTO_UPLOAD') {
+        if (item.nextAttemptAt > now) photoWait = Math.min(photoWait ?? item.nextAttemptAt, item.nextAttemptAt);
+        else photo ??= item;
+        continue;
+      }
       if (item.nextAttemptAt > now) return { waitUntil: item.nextAttemptAt };
       return { item };
     }
+    if (photo) return { item: photo };
+    if (photoWait !== null) return { waitUntil: photoWait };
     return 'BLOCKED';
   }
 

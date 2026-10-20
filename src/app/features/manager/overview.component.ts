@@ -1156,11 +1156,17 @@ export class OverviewComponent implements OnInit {
       mq.addEventListener('change', onChange);
       this.destroyRef.onDestroy(() => mq.removeEventListener('change', onChange));
     }
-    // Keep the day's picture fresh while the office has signal.
-    const timer = setInterval(() => {
+    // Keep the day's picture fresh while the office has signal: every 20 s while the page is in view, and at
+    // once when the window comes back to the front.
+    const refresh = (): void => {
       if (document.visibilityState === 'visible' && this.store.state() !== 'LOADING') void this.store.load();
-    }, 60_000);
-    this.destroyRef.onDestroy(() => clearInterval(timer));
+    };
+    const timer = setInterval(refresh, 20_000);
+    document.addEventListener('visibilitychange', refresh);
+    this.destroyRef.onDestroy(() => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+    });
   }
 
   /** ⌘K / Ctrl+K focuses the search, as the hint in the field promises. */
