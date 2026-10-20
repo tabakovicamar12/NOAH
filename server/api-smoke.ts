@@ -58,6 +58,16 @@ async function main(): Promise<void> {
   check('object numbers are issued per project', s1.body?.code === 'O-1' && s2.body?.code === 'O-2', `${s1.body?.code} ${s2.body?.code}`);
   check('a worker cannot create projects', (await call('POST', '/manager/projects', worker, { name: 'X' })).status === 403);
 
+  // Objects from the house catalogue, or named by hand
+  const house = await call('POST', '/manager/sites', admin, { projectId: p2.body.id, name: 'KLASIK 115', city: 'Celje', houseModel: 'klasik-115' });
+  check('an object can be a catalogue house', house.status === 201 && house.body?.houseModel === 'klasik-115', JSON.stringify(house.body));
+  check('an unknown house is refused', (await call('POST', '/manager/sites', admin, { projectId: p2.body.id, name: 'X', city: '', houseModel: 'castle-1' })).status === 400);
+  check('a hand-named object has no house', s2.body?.houseModel === null, String(s2.body?.houseModel));
+  await call('PATCH', `/admin/sites/${house.body.id}`, admin, { houseModel: 'duo-190' });
+  const listed = (await call('GET', '/manager/projects', admin)).body;
+  const changed = JSON.stringify(listed).includes('"houseModel":"duo-190"');
+  check('the house can be changed later', changed);
+
   const newOrder = async (unit: string, plannedQty: number, title: string): Promise<{ id: string; status: number; code?: string }> => {
     const id = crypto.randomUUID();
     const r = await call('PUT', `/manager/work-orders/${id}`, admin, {

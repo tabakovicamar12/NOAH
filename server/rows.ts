@@ -79,6 +79,7 @@ export function toSite(r: Row): Site {
     projectName: str(r['project_name']),
     name: str(r['name']),
     city: str(r['city']),
+    houseModel: strOrNull(r['house_model']),
   };
 }
 

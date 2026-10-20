@@ -47,6 +47,7 @@ import {
 } from '../core/models/domain.models';
 import { compareCodes, isIsoDate, minutesBetween, toIsoDate } from '../core/util/util';
 import { isMonth, monthOf, monthWindow } from '../core/worktime/worktime';
+import { houseModel } from '../core/models/house-catalog';
 import { MockServerDb, type Archivable, type MockOrder, type MockPhoto, type MockUser } from './mock-db';
 import { crewOf, ensureSeeded, siteLabel } from './mock-seed';
 
@@ -614,7 +615,17 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
     const code = body.code && body.code.trim() ? requireCode(body.code) : `O-${siblings.length + 1}`;
     const name = requireString(body.name, 'name').trim();
     if (siblings.some((s) => s.code === code)) throw new MockHttpError(409, 'CODE_TAKEN');
-    const site: Site = { id: `s-${crypto.randomUUID()}`, code, projectId: project.id, projectName: project.name, name, city: typeof body.city === 'string' ? body.city.trim() : '' };
+    const model = body.houseModel ?? null;
+    if (model !== null && !houseModel(model)) throw new MockHttpError(400, 'Unknown house model');
+    const site: Site = {
+      id: `s-${crypto.randomUUID()}`,
+      code,
+      projectId: project.id,
+      projectName: project.name,
+      name,
+      city: typeof body.city === 'string' ? body.city.trim() : '',
+      houseModel: model,
+    };
     await db.sites.put(site);
     return site;
   }
@@ -711,6 +722,7 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
       ...row,
       ...(body.name?.trim() ? { name: body.name.trim() } : {}),
       ...(!isProject && body.city !== undefined ? { city: body.city.trim() } : {}),
+      ...(!isProject && body.houseModel !== undefined ? { houseModel: body.houseModel || null } : {}),
       ...(body.active !== undefined ? { active: body.active } : {}),
     };
     await (table as typeof db.sites).put(next as Site);

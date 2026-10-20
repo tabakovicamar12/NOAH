@@ -993,6 +993,16 @@ export const SL = {
   'photo.lostOnDevice': 'Fotografije ni več na telefonu (shranjena je bila s starejšo različico aplikacije). Zavrzite ta vnos in fotografirajte znova.',
   'mgr.dayFilterNote': 'Prikazani so nalogi, ki se tičejo dneva {date}: delo, količine, opombe, težave, fotografije, načrtovan začetek ali rok. Stanje naloga je današnje.',
   'mgr.backToToday': 'Nazaj na danes',
+  'projects.houseModel': 'Vrsta objekta',
+  'projects.houseManual': 'Drugo – ime vnesem ročno',
+  'projects.catINDIVIDUAL': 'Individualne montažne hiše',
+  'projects.catTYPE': 'Tipske montažne hiše',
+  'projects.chipINDIVIDUAL': 'Individualna hiša',
+  'projects.chipTYPE': 'Tipska hiša',
+  'projects.houseHintModel': 'Ime objekta se izpolni po katalogu; lahko ga spremenite, npr. z dodanim krajem ali naročnikom.',
+  'projects.houseHintManual': 'Objekt ni iz kataloga: ime vnesite spodaj.',
+  'projects.balcony': 'balkon',
+  'projects.twoFlats': 'dvostanovanjska',
 } as const;
 
 export type TranslationKey = keyof typeof SL;

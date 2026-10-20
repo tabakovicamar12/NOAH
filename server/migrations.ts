@@ -279,6 +279,13 @@ create table if not exists change_marker (
 alter table change_marker enable row level security;
 `,
   },
+  {
+    id: '010_house_model',
+    // The catalogue house built on an object (see src/app/core/models/house-catalog.ts); null when typed by hand.
+    sql: `
+alter table sites add column if not exists house_model text;
+`,
+  },
 ];
 
 export async function migrate(db: Db, log: (msg: string) => void = () => undefined): Promise<string[]> {

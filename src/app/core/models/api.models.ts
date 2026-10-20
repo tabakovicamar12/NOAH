@@ -189,6 +189,8 @@ export interface SiteCreate {
   readonly code?: string;
   readonly name: string;
   readonly city: string;
+  /** Catalogue house id, or null for an object named by hand. */
+  readonly houseModel?: string | null;
 }
 
 // GET /manager/projects  (scoped: administrator all, manager their projects, foreman their objects)
@@ -209,6 +211,7 @@ export interface ProjectUpdate {
 export interface SiteUpdate {
   readonly name?: string;
   readonly city?: string;
+  readonly houseModel?: string | null;
   readonly active?: boolean;
 }
 

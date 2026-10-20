@@ -62,6 +62,8 @@ export interface Site {
   readonly projectName: string;
   readonly name: string;
   readonly city: string;
+  /** House from the catalogue (house-catalog.ts) built on this object; null when the name was typed by hand. */
+  readonly houseModel?: string | null;
 }
 
 export interface CrewMember {

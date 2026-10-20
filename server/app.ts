@@ -48,6 +48,7 @@ import {
   type TimeEntry,
   type WorkOrderStatus,
 } from '../src/app/core/models/domain.models';
+import { houseModel } from '../src/app/core/models/house-catalog';
 import { LoginThrottle, hashPassword, issueToken, readFileKey, readToken, verifyPassword } from './auth';
 import type { ServerConfig } from './config';
 import { getDb, type Db, type SqlParam } from './db';
@@ -143,6 +144,12 @@ async function jsonBody<T>(c: Context): Promise<T> {
   } catch {
     throw new HttpError(400, 'JSON body required');
   }
+}
+/** A catalogue house id, or null for an object named by hand. */
+function requireHouseModel(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string' || !houseModel(value)) throw new HttpError(400, 'Unknown house model');
+  return value;
 }
 function requireRole(value: unknown): Role {
   if (typeof value !== 'string' || !(ROLES as readonly string[]).includes(value)) throw new HttpError(400, 'role invalid');
@@ -736,25 +743,27 @@ export function createApp(config: ServerConfig): Hono<Env> {
     const typed = body.code && String(body.code).trim() ? requireCode(body.code) : null;
     const name = requireString(body.name, 'name', 120).trim();
     const city = optionalString(body.city, 80) ?? '';
+    const model = requireHouseModel(body.houseModel);
     const db = c.get('db');
     const id = `s-${randomUUID()}`;
     let code = typed ?? '';
     await db.tx(async (tx) => {
       const project = await tx.query(`select id from projects where id = $1 and active for update`, [projectId]);
       if (!project[0]) throw new HttpError(404, 'Project not found');
-      // Objects are numbered within their project (O-1, O-2 â€¦) unless the administrator typed a code.
+      // Objects are numbered within their project (O-1, O-2 …) unless the administrator typed a code.
       if (!typed) {
         const n = Number((await tx.query(`select count(*)::int as n from sites where project_id = $1`, [projectId]))[0]?.['n'] ?? 0);
         code = `O-${n + 1}`;
       }
       const taken = await tx.query(`select 1 from sites where project_id = $1 and code = $2 and active`, [projectId, code]);
       if (taken[0]) throw new HttpError(409, 'CODE_TAKEN');
-      await tx.query(`insert into sites (id, project_id, code, name, city, active, created_at) values ($1, $2, $3, $4, $5, true, $6)`, [
+      await tx.query(`insert into sites (id, project_id, code, name, city, house_model, active, created_at) values ($1, $2, $3, $4, $5, $6, true, $7)`, [
         id,
         projectId,
         code,
         name,
         city,
+        model,
         Date.now(),
       ]);
     });
@@ -927,12 +936,13 @@ export function createApp(config: ServerConfig): Hono<Env> {
       if (!row) throw new HttpError(404, 'Object not found');
       const name = body.name === undefined ? String(row['name']) : requireString(body.name, 'name', 120).trim();
       const city = body.city === undefined ? String(row['city'] ?? '') : (optionalString(body.city, 80) ?? '');
+      const model = body.houseModel === undefined ? (row['house_model'] == null ? null : String(row['house_model'])) : requireHouseModel(body.houseModel);
       const active = body.active === undefined ? row['active'] === true : body.active === true;
       if (!active && row['active'] === true) {
         const open = await db.query(`select 1 from work_orders where site_id = $1 and status <> 'COMPLETED' limit 1`, [id]);
         if (open.length > 0) throw new HttpError(409, 'OPEN_ORDERS');
       }
-      await db.query(`update sites set name = $2, city = $3, active = $4 where id = $1`, [id, name, city, active]);
+      await db.query(`update sites set name = $2, city = $3, active = $4, house_model = $5 where id = $1`, [id, name, city, active, model]);
     });
     return c.body(null, 204);
   });

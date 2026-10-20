@@ -8,6 +8,7 @@ import { ApiError, type AdminUser, type ManagerProjectsResponse, type ProjectOrd
 import { NetworkStatusService } from '../../core/network/network-status.service';
 import { ToastService } from '../../core/ui/toast.service';
 import type { CrewMember, QuantityUnit, Site, WorkOrderStatus } from '../../core/models/domain.models';
+import { HOUSE_CATALOG, HOUSE_CATEGORIES, houseModel, type HouseCategory, type HouseModel } from '../../core/models/house-catalog';
 import { minutesToHours } from '../../core/util/util';
 import { crewLabel } from '../../shared/ui/format';
 import { IconComponent } from '../../shared/ui/icon.component';
@@ -201,14 +202,19 @@ function dueSoon(o: ProjectOrderRow): boolean {
         @for (s of p.sites; track s.site.id) {
           <div class="pv-site-block">
             <div class="pv-site-head">
-              <h3>{{ s.site.name }}<span class="pv-code">{{ s.site.code }}</span></h3>
+              <h3>
+                {{ s.site.name }}<span class="pv-code">{{ s.site.code }}</span>
+                @if (houseOf(s.site); as m) {
+                  <span class="pv-house">{{ i18n.t(chipKey(m.category)) }} · {{ i18n.number(m.area) }} m²@if (m.extraArea) { + {{ i18n.number(m.extraArea) }} m² {{ i18n.t('projects.balcony') }}}@if (m.twoFlats) { · {{ i18n.t('projects.twoFlats') }}}</span>
+                }
+              </h3>
               <div class="pv-head-actions">
                 <span class="pv-foreman">
                   {{ i18n.t('projects.foremen') }}
                   <b [class.pv-none]="!foremenOf(p, s.site.id).length">{{ names(foremenOf(p, s.site.id)) || i18n.t('projects.nobody') }}</b>
                 </span>
                 @if (canManage() && editing()?.id !== s.site.id) {
-                  <button type="button" class="pv-quiet" (click)="openEdit('SITE', s.site.id, s.site.name, s.site.city, foremenOf(p, s.site.id))">
+                  <button type="button" class="pv-quiet" (click)="openEdit('SITE', s.site.id, s.site.name, s.site.city, foremenOf(p, s.site.id), s.site.houseModel ?? null)">
                     <aon-icon name="pencil" [size]="15" />{{ i18n.t('projects.editSite') }}
                   </button>
                 }
@@ -283,6 +289,9 @@ function dueSoon(o: ProjectOrderRow): boolean {
       <ng-template #editPanel>
         @if (editing(); as e) {
           <form class="as-panel" novalidate (submit)="$event.preventDefault(); saveEdit()" [attr.aria-label]="i18n.t(e.kind === 'PROJECT' ? 'projects.editProject' : 'projects.editSite')">
+            @if (e.kind === 'SITE') {
+              <ng-container *ngTemplateOutlet="housePick; context: { $implicit: editModel(), pick: pickEditModel }" />
+            }
             <div class="as-grid" [class.as-grid-2]="e.kind === 'SITE'">
               <label class="as-field">
                 <span>{{ i18n.t(e.kind === 'PROJECT' ? 'projects.projectName' : 'projects.siteName') }}</span>
@@ -403,6 +412,24 @@ function dueSoon(o: ProjectOrderRow): boolean {
         </a>
       </ng-template>
 
+      <!-- Catalogue house or a hand-typed name. Choosing a house fills in the name, which stays editable. -->
+      <ng-template #housePick let-value let-pick="pick">
+        <label class="as-field as-house">
+          <span>{{ i18n.t('projects.houseModel') }}</span>
+          <select [value]="value" (change)="pick($any($event.target).value)">
+            <option value="">{{ i18n.t('projects.houseManual') }}</option>
+            @for (cat of houseCategories; track cat) {
+              <optgroup [label]="i18n.t(catKey(cat))">
+                @for (m of modelsOf(cat); track m.id) {
+                  <option [value]="m.id" [selected]="m.id === value">{{ m.name }} · {{ i18n.number(m.area) }} m²</option>
+                }
+              </optgroup>
+            }
+          </select>
+        </label>
+        <p class="as-hint">{{ i18n.t(value ? 'projects.houseHintModel' : 'projects.houseHintManual') }}</p>
+      </ng-template>
+
       <ng-template #siteAdd let-p>
         @if (canManage() && adding() !== p.summary.project.id) {
           <button type="button" class="pv-quiet pv-add" (click)="openForm(p.summary.project.id)">
@@ -412,6 +439,7 @@ function dueSoon(o: ProjectOrderRow): boolean {
         @if (adding() === p.summary.project.id) {
           <form class="as-panel" novalidate (submit)="$event.preventDefault(); saveSite(p.summary.project.id)" [attr.aria-labelledby]="'new-site-' + p.summary.project.id">
             <h3 [id]="'new-site-' + p.summary.project.id" class="as-title">{{ i18n.t('projects.newSiteTitle', { project: p.summary.project.name }) }}</h3>
+            <ng-container *ngTemplateOutlet="housePick; context: { $implicit: formModel(), pick: pickNewModel }" />
             <div class="as-grid as-grid-3">
               <label class="as-field">
                 <span>{{ i18n.t('projects.codeOptional') }}</span>
@@ -434,6 +462,21 @@ function dueSoon(o: ProjectOrderRow): boolean {
 
   `,
   styles: `
+    .as-house + .as-hint {
+      margin-bottom: 0.85rem;
+    }
+    .pv-house {
+      display: inline-block;
+      margin-left: 0.5rem;
+      padding: 0.1rem 0.55rem;
+      border-radius: 9999px;
+      background: var(--color-gold-tint);
+      color: var(--color-text);
+      font-size: 0.78rem;
+      font-weight: 500;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
     /* ---- Who leads it ---- */
     .pw-detail-head,
     .pv-head-actions {
@@ -518,7 +561,8 @@ function dueSoon(o: ProjectOrderRow): boolean {
       color: var(--color-text-muted);
       font-size: 0.875rem;
     }
-    .as-field input {
+    .as-field input,
+    .as-field select {
       width: 100%;
       min-width: 0;
       min-height: 2.75rem;
@@ -531,7 +575,13 @@ function dueSoon(o: ProjectOrderRow): boolean {
       outline: none;
       transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
     }
-    .as-field input:focus {
+    .as-field select {
+      appearance: none;
+      padding-right: 2.5rem;
+      background: #fff url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27none%27 stroke=%27%236b6a65%27 stroke-width=%271.8%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27%3E%3Cpath d=%27m6 9 6 6 6-6%27/%3E%3C/svg%3E") no-repeat right 0.75rem center / 1.1rem;
+    }
+    .as-field input:focus,
+    .as-field select:focus {
       border-color: var(--color-gold);
       box-shadow: 0 0 0 3px rgb(193 160 80 / 0.25);
     }
@@ -1270,6 +1320,7 @@ export class ProjectsComponent implements OnInit {
   protected readonly editing = signal<{ readonly kind: 'PROJECT' | 'SITE'; readonly id: string } | null>(null);
   protected readonly editName = signal('');
   protected readonly editCity = signal('');
+  protected readonly editModel = signal('');
   protected readonly picked = signal<ReadonlySet<string>>(new Set());
   protected readonly confirmArchive = signal(false);
   private readonly accounts = signal<readonly AdminUser[] | null>(null);
@@ -1286,6 +1337,7 @@ export class ProjectsComponent implements OnInit {
   protected readonly formCode = signal('');
   protected readonly formName = signal('');
   protected readonly formCity = signal('');
+  protected readonly formModel = signal('');
   protected readonly formError = signal<string | null>(null);
   protected readonly saving = signal(false);
 
@@ -1394,11 +1446,47 @@ export class ProjectsComponent implements OnInit {
     return p.summary.foremen[siteId] ?? [];
   }
 
-  protected openEdit(kind: 'PROJECT' | 'SITE', id: string, name: string, city: string, leads: readonly CrewMember[]): void {
+  protected readonly houseCategories = HOUSE_CATEGORIES;
+
+  protected modelsOf(category: HouseCategory): readonly HouseModel[] {
+    return HOUSE_CATALOG.filter((m) => m.category === category);
+  }
+
+  protected houseOf(site: Site): HouseModel | null {
+    return houseModel(site.houseModel);
+  }
+
+  protected catKey(category: HouseCategory): TranslationKey {
+    return `projects.cat${category}` as TranslationKey;
+  }
+
+  protected chipKey(category: HouseCategory): TranslationKey {
+    return `projects.chip${category}` as TranslationKey;
+  }
+
+  /**
+   * A chosen house fills in the name when the field is empty or still holds the previous house's name; a name
+   * the administrator typed is never overwritten.
+   */
+  private applyModel(model: string, current: () => string, setModel: (v: string) => void, setName: (v: string) => void, previous: string): void {
+    const before = houseModel(previous)?.name ?? '';
+    setModel(model);
+    const next = houseModel(model);
+    if (next && (!current().trim() || current().trim() === before)) setName(next.name);
+  }
+
+  protected readonly pickNewModel = (model: string): void =>
+    this.applyModel(model, () => this.formName(), (v) => this.formModel.set(v), (v) => this.formName.set(v), this.formModel());
+
+  protected readonly pickEditModel = (model: string): void =>
+    this.applyModel(model, () => this.editName(), (v) => this.editModel.set(v), (v) => this.editName.set(v), this.editModel());
+
+  protected openEdit(kind: 'PROJECT' | 'SITE', id: string, name: string, city: string, leads: readonly CrewMember[], model: string | null = null): void {
     this.closeForm();
     this.editing.set({ kind, id });
     this.editName.set(name);
     this.editCity.set(city);
+    this.editModel.set(model ?? '');
     this.picked.set(new Set(leads.map((m) => m.id)));
     this.confirmArchive.set(false);
     this.formError.set(null);
@@ -1441,7 +1529,7 @@ export class ProjectsComponent implements OnInit {
         await this.api.updateProject(e.id, { name });
         await this.api.setProjectManagers(e.id, { userIds });
       } else {
-        await this.api.updateSite(e.id, { name, city: this.editCity().trim() });
+        await this.api.updateSite(e.id, { name, city: this.editCity().trim(), houseModel: this.editModel() || null });
         await this.api.setSiteForemen(e.id, { userIds });
       }
       void this.store.loadDirectory();
@@ -1473,6 +1561,7 @@ export class ProjectsComponent implements OnInit {
     this.formCode.set('');
     this.formName.set('');
     this.formCity.set('');
+    this.formModel.set('');
     this.formError.set(null);
   }
 
@@ -1497,7 +1586,7 @@ export class ProjectsComponent implements OnInit {
     const input = this.readForm();
     if (!input) return;
     await this.persist(async () => {
-      const site = await this.store.createSite({ projectId, ...input, city: this.formCity().trim() });
+      const site = await this.store.createSite({ projectId, ...input, city: this.formCity().trim(), houseModel: this.formModel() || null });
       this.toast.success(this.i18n.t('projects.siteCreated', { name: site.name }));
       this.closeForm();
     });
