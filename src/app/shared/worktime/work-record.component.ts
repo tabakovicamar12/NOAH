@@ -151,7 +151,7 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
                     @let w = line.row;
                     <tr class="wk">
                       <th scope="row">{{ i18n.t('rec.week', { n: w.n }) }}</th>
-                      <td colspan="2" class="r muted">{{ w.longestRest === null ? '' : i18n.t('rec.weekRest', { h: h(w.longestRest) }) }}</td>
+                      <td colspan="2" class="r muted nowrap">{{ w.longestRest === null ? '' : i18n.t('rec.weekRest', { h: h(w.longestRest) }) }}</td>
                       <td class="r num strong" [class.bad]="w.minutes > R.maxWeekMin">{{ hm(w.minutes) }}</td>
                       <td class="r num">{{ hm(w.minutes - w.overtime) }}</td>
                       <td class="r num" [class.ot]="w.overtime > 0" [class.bad]="w.overtime > R.overtimeWeekMin">{{ w.overtime ? hm(w.overtime) : '–' }}</td>
@@ -241,7 +241,7 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
         </section>
 
         <footer class="rec-foot">
-          <span>{{ org.titled(i18n.t('rec.title')) }} · {{ u.displayName }} · {{ monthLabel() }}</span>
+          <span>{{ i18n.t('rec.title') }} · {{ u.displayName }} · {{ monthLabel() }}</span>
           <span class="num">{{ docNo() }}</span>
         </footer>
       </article>
@@ -480,6 +480,9 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       color: var(--bad);
       font-weight: 700;
     }
+    .nowrap {
+      white-space: nowrap;
+    }
     .orders {
       max-width: 11rem;
       color: #333;
@@ -625,9 +628,13 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       }
       .rec-meta > div,
       .rec-meta > div + div {
-        padding: 0.45rem 0;
+        padding: 0.45rem 0.6rem 0.45rem 0;
         border-left: 0;
         border-top: 1px solid var(--hair);
+      }
+      .rec-meta dd {
+        white-space: normal;
+        overflow-wrap: anywhere;
       }
       .rec-figs {
         grid-template-columns: 1fr 1fr;
@@ -767,7 +774,9 @@ export class WorkRecordComponent {
 
   /** Up to three order codes, then a count, so a busy day stays one line. */
   private codes(list: readonly string[]): string {
-    return list.length > 3 ? `${list.slice(0, 3).join(', ')} +${list.length - 3}` : list.join(', ');
+    // Non-breaking hyphen: an order number never splits across two lines.
+    const nb = list.map((c) => c.replaceAll('-', '‑'));
+    return nb.length > 3 ? `${nb.slice(0, 3).join(', ')} +${nb.length - 3}` : nb.join(', ');
   }
 
   protected restLabel(min: number): string {

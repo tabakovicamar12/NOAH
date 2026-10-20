@@ -376,10 +376,10 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
               <header class="s-head">
                 <div>
                   <aon-logo [size]="1.15" />
-                  <p class="kicker">{{ projectName() }}</p>
+                  <p class="kicker">{{ org.name() ? org.name() + ' · ' : '' }}{{ projectName() }}</p>
                 </div>
                 <div class="s-titleblock">
-                  <h1 class="s-title">{{ org.titled(i18n.t('op.docTitle')) }}</h1>
+                  <h1 class="s-title">{{ i18n.t('op.docTitle') }}</h1>
                   <p class="s-no num">{{ i18n.t('op.docNo', { code: o.code ?? '–' }) }}</p>
                 </div>
               </header>
@@ -582,7 +582,7 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
               </section>
 
               <footer class="s-foot">
-                <span>{{ org.titled(i18n.t('op.docTitle')) }} · {{ o.title }}</span>
+                <span>{{ i18n.t('op.docTitle') }} · {{ o.title }}</span>
                 <span class="num">{{ o.code ?? '' }}</span>
               </footer>
             </article>

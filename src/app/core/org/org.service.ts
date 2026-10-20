@@ -28,12 +28,6 @@ export class OrgService {
     return this.loading;
   }
 
-  /** "NOAH d.o.o. – Dnevno poročilo", or the title alone while no employer is configured. */
-  titled(title: string): string {
-    const name = this.name();
-    return name ? `${name} – ${title}` : title;
-  }
-
   private async fetch(): Promise<void> {
     try {
       const cached = (await this.db.kv.get(CACHE_KEY))?.value as OrgInfo | undefined;

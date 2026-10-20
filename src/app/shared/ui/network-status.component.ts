@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal, viewChild } from '@angular/core';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { NetworkStatusService } from '../../core/network/network-status.service';
 import { SyncEngine } from '../../core/sync/sync-engine.service';
@@ -12,11 +12,17 @@ import { IconComponent } from './icon.component';
   selector: 'aon-network-status',
   imports: [IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'relative inline-block', '(document:pointerdown)': 'onOutside($event)', '(document:keydown.escape)': 'open.set(false)' },
+  host: {
+    class: 'relative inline-block',
+    '(document:pointerdown)': 'onOutside($event)',
+    '(document:keydown.escape)': 'open.set(false)',
+    '(window:resize)': 'open.set(false)',
+  },
   template: `
     @if (variant() === 'pill' || variant() === 'line') {
       <button
         type="button"
+        #trigger
         class="net-pill"
         [class.is-line]="variant() === 'line'"
         [class.on-dark]="variant() === 'line' && onDark()"
@@ -38,6 +44,7 @@ import { IconComponent } from './icon.component';
       </button>
     } @else {
     <button
+      #trigger
       type="button"
       class="flex min-h-12 items-stretch text-left"
       [attr.aria-expanded]="open()"
@@ -71,50 +78,157 @@ import { IconComponent } from './icon.component';
     </button>
     }
 
-    @if (open()) {
-      <div
-        id="aon-net-panel"
-        role="dialog"
-        [attr.aria-label]="i18n.t('more.sync')"
-        class="absolute z-50 mt-2 w-[min(20rem,calc(100vw-2rem))] border-2 border-charcoal bg-stock p-4 text-ink shadow-[0_12px_32px_-8px_rgb(0_0_0/0.35)]"
-        [class.right-0]="align() === 'end'"
-        [class.left-0]="align() === 'start'"
-        [class.bottom-full]="placement() === 'top'"
-        [class.mb-2]="placement() === 'top'"
-      >
-        <p class="font-cond text-2xl leading-tight">{{ stateLabel() }}</p>
-        <p class="mt-1 text-sm text-ink-muted">
+    <!-- Top layer (popover): no ancestor's clip-path, overflow or z-index can hide it. -->
+    <div #panel id="aon-net-panel" popover="manual" role="dialog" class="net-panel" [attr.aria-label]="i18n.t('more.sync')">
+      @if (open()) {
+        <div class="np-head">
+          <p class="np-state" [class.is-off]="!network.online()">
+            @if (!network.online()) {
+              <aon-icon name="cloud-off" [size]="18" />
+            } @else {
+              <span class="net-dot"></span>
+            }
+            {{ stateLabel() }}
+          </p>
+          <button type="button" class="np-close" [attr.aria-label]="i18n.t('common.close')" (click)="open.set(false)"><aon-icon name="x" [size]="18" /></button>
+        </div>
+        <p class="np-sub">
           {{ sync.lastSyncAt() ? i18n.t('net.lastSync', { time: i18n.time(sync.lastSyncAt()) }) : i18n.t('net.neverSynced') }}
         </p>
-        <dl class="mt-3 grid grid-cols-2 gap-2 text-sm">
-          <div class="border-2 border-charcoal px-3 py-2">
-            <dt class="label-caps text-ink-muted">{{ i18n.t('net.pending', { n: '' }) }}</dt>
-            <dd class="font-cond text-3xl">{{ sync.pendingCount() }}</dd>
+        <dl class="np-figs">
+          <div>
+            <dt>{{ i18n.t('net.pending', { n: '' }) }}</dt>
+            <dd class="num">{{ sync.pendingCount() }}</dd>
           </div>
-          <div class="border-2 px-3 py-2" [class]="sync.failedItems().length ? 'border-hold text-hold-ink' : 'border-charcoal'">
-            <dt class="label-caps">{{ i18n.t('net.failed', { n: '' }) }}</dt>
-            <dd class="font-cond text-3xl">{{ sync.failedItems().length }}</dd>
+          <div [class.is-bad]="sync.failedItems().length > 0">
+            <dt>{{ i18n.t('net.failed', { n: '' }) }}</dt>
+            <dd class="num">{{ sync.failedItems().length }}</dd>
           </div>
         </dl>
         @if (sync.unsyncedCount() === 0) {
-          <p class="mt-3 flex items-center gap-2 text-sm font-semibold"><aon-icon name="circle-check" [size]="18" class="text-done" />{{ i18n.t('net.allSynced') }}</p>
+          <p class="np-ok"><aon-icon name="circle-check" [size]="18" />{{ i18n.t('net.allSynced') }}</p>
         }
         @if (network.simulatedOffline()) {
-          <p class="mt-3 text-sm font-semibold text-hold-ink">{{ i18n.t('more.simulateOffline') }} · {{ i18n.t('net.simulated') }}</p>
+          <p class="np-warn">{{ i18n.t('more.simulateOffline') }} · {{ i18n.t('net.simulated') }}</p>
         }
-        <button
-          type="button"
-          class="mt-4 flex min-h-12 w-full items-center justify-center gap-2 bg-charcoal px-4 font-cond text-lg text-white disabled:opacity-50"
-          [disabled]="!network.online() || sync.phase() === 'SYNCING'"
-          (click)="sync.syncNow()"
-        >
-          <aon-icon name="refresh" [size]="20" />
+        <button type="button" class="np-sync" [disabled]="!network.online() || sync.phase() === 'SYNCING'" (click)="sync.syncNow()">
+          <aon-icon name="refresh" [size]="18" [class.animate-spin]="sync.phase() === 'SYNCING'" />
           {{ i18n.t('net.syncNow') }}
         </button>
-      </div>
-    }
+      }
+    </div>
   `,
   styles: `
+    .net-panel {
+      position: fixed;
+      inset: auto;
+      margin: 0;
+      max-height: calc(100dvh - 1.5rem);
+      overflow-y: auto;
+      padding: 1rem;
+      border: 1px solid var(--color-line-strong);
+      border-radius: 0.85rem;
+      background: #fff;
+      color: var(--color-text);
+      font-family: var(--font-ui);
+      text-align: left;
+      white-space: normal;
+      box-shadow: 0 18px 40px -14px rgb(20 20 20 / 0.4);
+    }
+    .np-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .np-state {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 1.15rem;
+      font-weight: 650;
+    }
+    .np-state.is-off {
+      color: var(--color-gold-ink);
+    }
+    .np-close {
+      display: grid;
+      place-items: center;
+      width: 2.75rem;
+      height: 2.75rem;
+      margin: -0.5rem -0.5rem -0.5rem 0;
+      border-radius: 0.5rem;
+      color: var(--color-text-muted);
+    }
+    .np-close:hover {
+      background: var(--color-field);
+    }
+    .np-sub {
+      margin-top: 0.15rem;
+      color: var(--color-text-muted);
+      font-size: 0.9rem;
+    }
+    .np-figs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      margin-top: 0.85rem;
+    }
+    .np-figs > div {
+      padding: 0.55rem 0.75rem;
+      border: 1px solid var(--color-line);
+      border-radius: 0.6rem;
+      background: var(--color-field);
+    }
+    .np-figs > div.is-bad {
+      border-color: var(--color-bad);
+      background: var(--color-bad-tint);
+      color: var(--color-bad-ink);
+    }
+    .np-figs dt {
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .np-figs dd {
+      margin-top: 0.1rem;
+      font-size: 1.6rem;
+      font-weight: 650;
+      line-height: 1.1;
+      font-variant-numeric: tabular-nums;
+    }
+    .np-ok {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      margin-top: 0.75rem;
+      color: var(--color-ok);
+      font-size: 0.92rem;
+      font-weight: 600;
+    }
+    .np-warn {
+      margin-top: 0.75rem;
+      color: var(--color-gold-ink);
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .np-sync {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      width: 100%;
+      min-height: 3rem;
+      margin-top: 0.9rem;
+      border-radius: 0.6rem;
+      background: var(--color-charcoal);
+      color: #fff;
+      font-weight: 600;
+    }
+    .np-sync:disabled {
+      opacity: 0.5;
+    }
     .net-pill {
       display: inline-flex;
       align-items: center;
@@ -189,6 +303,49 @@ export class NetworkStatusComponent {
   /** `pill`: rounded status chip; `line`: the same status as quiet text (field bar); `badge`: the legacy square badge. */
   readonly variant = input<'badge' | 'pill' | 'line'>('badge');
   protected readonly open = signal(false);
+  private readonly trigger = viewChild<ElementRef<HTMLElement>>('trigger');
+  private readonly panel = viewChild.required<ElementRef<HTMLElement>>('panel');
+
+  constructor() {
+    effect(() => {
+      const el = this.panel().nativeElement;
+      const open = this.open();
+      if (open) this.place(el);
+      // Browsers without the Popover API (iOS < 17): a fixed panel above everything else.
+      if (typeof el.showPopover !== 'function') {
+        el.style.display = open ? 'block' : 'none';
+        el.style.zIndex = '1000';
+        return;
+      }
+      if (open && !el.matches(':popover-open')) el.showPopover();
+      else if (!open && el.matches(':popover-open')) el.hidePopover();
+    });
+  }
+
+  /** Next to the badge, kept inside the viewport with a 12px gutter; full width less the gutter on a phone. */
+  private place(el: HTMLElement): void {
+    const btn = this.trigger()?.nativeElement.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth;
+    const gutter = 12;
+    const width = Math.min(320, vw - gutter * 2);
+    let left = btn ? (this.align() === 'end' ? btn.right - width : btn.left) : gutter;
+    left = Math.max(gutter, Math.min(left, vw - width - gutter));
+    el.style.width = `${width}px`;
+    el.style.left = `${left}px`;
+    // The preferred side, unless the other one has clearly more room (a menu near the top of a phone).
+    const above = btn ? btn.top - gutter : 0;
+    const below = window.innerHeight - (btn?.bottom ?? 56) - gutter;
+    const up = this.placement() === 'top' ? above >= 280 || above > below : below < 280 && above > below;
+    if (up && btn) {
+      el.style.top = 'auto';
+      el.style.bottom = `${window.innerHeight - btn.top + 8}px`;
+      el.style.maxHeight = `${above - 8}px`;
+    } else {
+      el.style.bottom = 'auto';
+      el.style.top = `${(btn?.bottom ?? 56) + 8}px`;
+      el.style.maxHeight = `${below - 8}px`;
+    }
+  }
 
   protected readonly stateLabel = computed(() => {
     if (!this.network.online()) return this.i18n.t('net.offline');

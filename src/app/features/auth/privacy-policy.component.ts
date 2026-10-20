@@ -17,7 +17,7 @@ import { LogoComponent } from '../../shared/ui/logo.component';
         <button type="button" class="-ml-2 flex min-h-11 items-center gap-1.5 rounded-lg px-2 font-medium hover:bg-white/10" (click)="back()">
           <aon-icon name="arrow-left" [size]="18" />{{ i18n.t('common.back') }}
         </button>
-        <aon-logo [size]="1.2" />
+        <aon-logo [size]="1.2" class="max-[359px]:hidden" />
         <aon-language-switch [onDark]="true" />
       </div>
     </header>

@@ -51,21 +51,24 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
                 <div>
                   <aon-logo [size]="1.15" />
                   @if (org.name(); as name) {
-                    <p class="kicker">{{ name }}</p>
+                    <p class="kicker">{{ name }}@if (org.info()?.address; as a) { · {{ a }}}</p>
                   }
                 </div>
                 <div class="s-titleblock">
-                  <h1 class="s-title">{{ org.titled(i18n.t('day.title')) }}</h1>
+                  <h1 class="s-title">{{ i18n.t('day.title') }}</h1>
                   <p class="s-date">{{ i18n.dateLong(s.date) }}</p>
+                  <p class="s-no num">{{ docNo() }}</p>
                 </div>
               </header>
 
               <dl class="meta">
-                <div><dt>{{ i18n.t('mgr.colWorker') }}</dt><dd class="strong">{{ d.worker.displayName }}@if (d.worker.crew) {<span class="muted"> · {{ d.worker.crew }}</span>}</dd></div>
+                <div><dt>{{ i18n.t('mgr.colWorker') }}</dt><dd class="strong">{{ d.worker.displayName }}</dd></div>
+                <div><dt>{{ i18n.t('rec.crew') }}</dt><dd>{{ d.worker.crew || '–' }}</dd></div>
                 <div><dt>{{ i18n.t('sheet.projectSite') }}</dt><dd>{{ sites() || '–' }}</dd></div>
-                <div><dt>{{ i18n.t('pdf.date') }}</dt><dd class="num">{{ i18n.dateShort(s.date) }}</dd></div>
-                <div><dt>{{ i18n.t('rec.docNo') }}</dt><dd class="num">{{ docNo() }}</dd></div>
-                <div><dt>{{ i18n.t('sheet.status') }}</dt><dd>{{ i18n.t(statusKey(s.status)) }}</dd></div>
+                <div>
+                  <dt>{{ i18n.t('sheet.status') }}</dt>
+                  <dd><span class="pill" [attr.data-s]="s.status">{{ i18n.t(statusKey(s.status)) }}</span></dd>
+                </div>
               </dl>
               @if (demo) {
                 <p class="demo">{{ i18n.t('common.demo') }}</p>
@@ -78,44 +81,83 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
                 <div class="fig"><p class="fig-k">{{ i18n.t('sheet.onOrders') }}</p><p class="fig-v num">{{ hm(s.orderMinutes) }}<span class="fig-u">h</span></p></div>
                 <div class="fig" [class.bad]="s.issuesReported > 0"><p class="fig-k">{{ i18n.t('drill.issues') }}</p><p class="fig-v num">{{ s.issuesReported }}</p></div>
               </section>
-              @if (s.declaredEnd) {
-                <p class="flagnote">{{ i18n.t('review.declaredEnd') }}</p>
-              }
-              @for (c of s.corrections; track $index) {
-                <p class="flagnote">
-                  {{ i18n.t(c.field === 'ARRIVAL' ? 'day.arrival' : 'day.departure') }}: {{ i18n.time(c.recordedAt) }} → {{ i18n.time(c.proposedAt) }} · {{ c.reason }}
-                </p>
+              @if (s.declaredEnd || s.corrections.length) {
+                <div class="flags">
+                  @if (s.declaredEnd) {
+                    <p>{{ i18n.t('review.declaredEnd') }}</p>
+                  }
+                  @for (c of s.corrections; track $index) {
+                    <p>
+                      <span class="strong">{{ i18n.t(c.field === 'ARRIVAL' ? 'day.arrival' : 'day.departure') }}:</span>
+                      <span class="num">{{ i18n.time(c.recordedAt) }} → {{ i18n.time(c.proposedAt) }}</span> · {{ c.reason }}
+                    </p>
+                  }
+                </div>
               }
 
               <section class="sec">
                 <h2 class="h">{{ i18n.t('pdf.orders') }}</h2>
                 @if (s.lines.length) {
-                  @for (l of s.lines; track l.workOrderId) {
-                    <div class="line keep">
-                      <div class="line-head">
-                        <p><span class="strong num">{{ l.code ?? '–' }}</span> · {{ l.title }}<span class="muted"> · {{ l.siteName }}</span></p>
-                        <p class="num nowrap">{{ hm(l.minutes) }} h · {{ i18n.number(l.quantity) }} {{ i18n.t(unitKey(l.unit)) }}</p>
-                      </div>
-                      <p class="lbl">{{ i18n.t('day.workDone') }}</p>
-                      <p class="txt">{{ l.workDone || '–' }}</p>
-                      @if (l.materialsUsed.length) {
-                        <p class="lbl">{{ i18n.t('day.materialsUsed') }}</p>
-                        <p class="txt">
-                          @for (m of l.materialsUsed; track $index; let last = $last) {
-                            {{ m.name }}@if (m.qty !== null) { {{ i18n.number(m.qty) }} {{ m.unit ?? '' }}}@if (!last) {, }
-                          }
-                        </p>
-                      }
-                      @if (l.issues.length) {
-                        <p class="lbl">{{ i18n.t('drill.issues') }}</p>
-                        <ul class="issues">
-                          @for (issue of l.issues; track $index) {
-                            <li>{{ issue }}</li>
-                          }
-                        </ul>
-                      }
-                    </div>
-                  }
+                  <table class="t">
+                    <thead>
+                      <tr>
+                        <th scope="col" class="c-code">{{ i18n.t('mgr.colCode') }}</th>
+                        <th scope="col">{{ i18n.t('mgr.colTitle') }}</th>
+                        <th scope="col">{{ i18n.t('mgr.colSite') }}</th>
+                        <th scope="col" class="r">{{ i18n.t('day.hours') }}</th>
+                        <th scope="col" class="r">{{ i18n.t('sheet.quantity') }}</th>
+                      </tr>
+                    </thead>
+                    @for (l of s.lines; track l.workOrderId) {
+                      <tbody class="keep">
+                        <tr class="o-row">
+                          <td class="num nowrap strong">{{ l.code ?? '–' }}</td>
+                          <td class="strong">{{ l.title }}</td>
+                          <td>{{ l.siteName }}</td>
+                          <td class="r num nowrap">{{ hm(l.minutes) }}</td>
+                          <td class="r num nowrap">{{ i18n.number(l.quantity) }} {{ i18n.t(unitKey(l.unit)) }}</td>
+                        </tr>
+                        <tr class="o-detail">
+                          <td></td>
+                          <td colspan="4">
+                            <div class="d-grid">
+                              <div>
+                                <p class="lbl">{{ i18n.t('day.workDone') }}</p>
+                                <p class="txt">{{ l.workDone || '–' }}</p>
+                              </div>
+                              <div>
+                                <p class="lbl">{{ i18n.t('day.materialsUsed') }}</p>
+                                @if (l.materialsUsed.length) {
+                                  <ul class="mats">
+                                    @for (m of l.materialsUsed; track $index) {
+                                      <li><span>{{ m.name }}</span><span class="num nowrap">{{ m.qty !== null ? i18n.number(m.qty) : '' }} {{ m.unit ?? '' }}</span></li>
+                                    }
+                                  </ul>
+                                } @else {
+                                  <p class="txt muted">–</p>
+                                }
+                              </div>
+                            </div>
+                            @if (l.issues.length) {
+                              <p class="lbl">{{ i18n.t('drill.issues') }}</p>
+                              <ul class="issues">
+                                @for (issue of l.issues; track $index) {
+                                  <li>{{ issue }}</li>
+                                }
+                              </ul>
+                            }
+                          </td>
+                        </tr>
+                      </tbody>
+                    }
+                    <tfoot>
+                      <tr>
+                        <th scope="row" colspan="3">{{ i18n.t('rec.total') }}</th>
+                        <td class="r num">{{ hm(s.orderMinutes) }}</td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 } @else {
                   <p class="none">{{ i18n.t('common.none') }}</p>
                 }
@@ -127,7 +169,7 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
               </section>
 
               <section class="sec">
-                <h2 class="h">{{ i18n.t('day.photos') }} <span class="muted num">({{ d.photos.length }})</span></h2>
+                <h2 class="h">{{ i18n.t('day.photos') }} <span class="muted num">· {{ d.photos.length }}</span></h2>
                 @if (d.photos.length) {
                   <ul class="photos">
                     @for (p of d.photos; track p.id) {
@@ -135,7 +177,13 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
                         @if (p.url) {
                           <img [src]="p.url" [alt]="i18n.t(photoKey(p.category))" />
                         }
-                        <p><span class="strong">{{ i18n.t(photoKey(p.category)) }}</span> · <span class="num">{{ i18n.time(p.createdAt) }}</span>@if (orderCode(p.workOrderId); as code) {<span class="muted"> · {{ code }}</span>}</p>
+                        <p>
+                          <span class="strong" [class.is-bad]="p.category === 'ISSUE'">{{ i18n.t(photoKey(p.category)) }}</span>
+                          <span class="muted num"> · {{ i18n.time(p.createdAt) }}@if (orderCode(p.workOrderId); as code) { · {{ code }}}</span>
+                        </p>
+                        @if (p.caption) {
+                          <p class="muted">{{ p.caption }}</p>
+                        }
                       </li>
                     }
                   </ul>
@@ -144,19 +192,32 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
                 }
               </section>
 
-              @if (s.reviewedAt) {
-                <p class="legend">{{ i18n.t('day.reviewedBy', { name: s.reviewerName ?? '', time: i18n.dateShort(s.reviewedAt) + ' ' + i18n.time(s.reviewedAt) }) }}@if (s.reviewerNote) { · »{{ s.reviewerNote }}«}</p>
-              }
+              <section class="sec keep">
+                <h2 class="h">{{ i18n.t('sheet.review') }}</h2>
+                @if (s.reviewedAt) {
+                  <p>
+                    <span class="pill" [attr.data-s]="s.status">{{ i18n.t(statusKey(s.status)) }}</span>
+                    <span> {{ s.reviewerName ?? '' }} · <span class="num">{{ i18n.dateShort(s.reviewedAt) }} {{ i18n.time(s.reviewedAt) }}</span></span>
+                  </p>
+                  @if (s.reviewerNote) {
+                    <p class="txt mt">»{{ s.reviewerNote }}«</p>
+                  }
+                } @else {
+                  <p class="muted">{{ i18n.t('sheet.notReviewed') }}@if (s.submittedAt) { · {{ i18n.t('sheet.submitted') }} <span class="num">{{ i18n.dateShort(s.submittedAt) }} {{ i18n.time(s.submittedAt) }}</span>}</p>
+                }
+              </section>
+
               <p class="legend">{{ i18n.t('sheet.legend') }}</p>
 
               <div class="sign keep">
-                <div><span class="line-s"></span><p>{{ i18n.t('mgr.colWorker') }}</p></div>
-                <div><span class="line-s"></span><p>{{ i18n.t('pdf.signManager') }}</p></div>
+                <div><span class="line-s"></span><p>{{ i18n.t('mgr.colWorker') }} · {{ d.worker.displayName }}</p></div>
+                <div><span class="line-s"></span><p>{{ i18n.t('pdf.signManager') }}@if (s.reviewerName) { · {{ s.reviewerName }}}</p></div>
+                <div><span class="line-s"></span><p>{{ i18n.t('rec.signDate') }}</p></div>
               </div>
 
               <footer class="s-foot">
-                <span>{{ org.titled(i18n.t('day.title')) }} · {{ d.worker.displayName }} · {{ i18n.dateShort(s.date) }}</span>
-                <span class="num">{{ i18n.t('rec.generated') }} {{ generated() }}</span>
+                <span>{{ i18n.t('day.title') }} · {{ d.worker.displayName }} · {{ i18n.dateShort(s.date) }}</span>
+                <span class="num">{{ docNo() }} · {{ i18n.t('rec.generated') }} {{ generated() }}</span>
               </footer>
             </article>
           }
@@ -312,9 +373,16 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
     .s-date::first-letter {
       text-transform: uppercase;
     }
+    .s-no {
+      margin-top: 0.1rem;
+      color: var(--muted);
+      font-size: 8pt;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
     .meta {
       display: grid;
-      grid-template-columns: 1.3fr 1.8fr 0.9fr 1fr 1fr;
+      grid-template-columns: 1.3fr 0.8fr 2fr 1.1fr;
       border-bottom: 1px solid var(--hair);
     }
     .meta > div {
@@ -374,12 +442,100 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
     .fig.bad .fig-v {
       color: var(--bad);
     }
-    .flagnote {
-      margin-top: 0.4rem;
-      padding-left: 0.4rem;
-      border-left: 2px solid var(--bad);
-      color: var(--bad);
+    .pill {
+      display: inline-block;
+      padding: 0.05rem 0.5rem;
+      border: 1px solid currentColor;
+      border-radius: 9999px;
       font-size: 8pt;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .pill[data-s='APPROVED'] {
+      color: #1d6b38;
+    }
+    .pill[data-s='SUBMITTED'] {
+      color: #7a5d17;
+    }
+    .pill[data-s='RETURNED'] {
+      color: var(--bad);
+    }
+    .flags {
+      display: grid;
+      gap: 0.2rem;
+      margin-top: 0.6rem;
+      padding: 0.45rem 0.65rem;
+      border-left: 3px solid var(--bad);
+      background: #fbe5e6;
+      font-size: 8.4pt;
+    }
+    .is-bad {
+      color: var(--bad);
+    }
+    .mt {
+      margin-top: 0.3rem;
+    }
+    .t {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8.8pt;
+    }
+    .t th,
+    .t td {
+      padding: 0.3rem 0.5rem;
+      text-align: left;
+      vertical-align: baseline;
+    }
+    .t th:first-child,
+    .t td:first-child {
+      padding-left: 0;
+    }
+    .t th:last-child,
+    .t td:last-child {
+      padding-right: 0;
+    }
+    .t thead th {
+      color: var(--muted);
+      font-size: 7pt;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      border-bottom: 1.5px solid var(--rule);
+    }
+    .t .r {
+      text-align: right;
+    }
+    .c-code {
+      width: 6.5rem;
+    }
+    .t tbody {
+      border-bottom: 1px solid var(--hair);
+    }
+    .o-row td {
+      padding-top: 0.5rem;
+    }
+    .o-detail td {
+      padding-top: 0;
+      padding-bottom: 0.6rem;
+    }
+    .d-grid {
+      display: grid;
+      grid-template-columns: 1.6fr 1fr;
+      gap: 0.4rem 1.25rem;
+    }
+    .mats li {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.1rem 0;
+      border-bottom: 1px dotted var(--hair);
+    }
+    .t tfoot th,
+    .t tfoot td {
+      padding-top: 0.4rem;
+      border-top: 2px solid var(--rule);
+      font-weight: 700;
     }
     .sec {
       margin-top: 1.15rem;
@@ -443,8 +599,8 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
     }
     .sign {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 2rem;
+      grid-template-columns: 1.4fr 1.4fr 1fr;
+      gap: 1.5rem;
       margin-top: 2rem;
     }
     .line-s {
@@ -509,6 +665,66 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
       }
       .photos {
         grid-template-columns: 1fr 1fr;
+      }
+      .d-grid,
+      .sign {
+        grid-template-columns: 1fr;
+      }
+      /* The order table becomes a stack: number and title, the object, then time and quantity. */
+      .t thead {
+        display: none;
+      }
+      .t,
+      .t tbody,
+      .t tfoot,
+      .t tr,
+      .t td,
+      .t th {
+        display: block;
+        padding-left: 0;
+        padding-right: 0;
+      }
+      .t td,
+      .t th {
+        width: auto;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .sec > .t {
+        min-width: 0;
+      }
+      .t tr.o-row {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: 0.6rem;
+      }
+      .t tr.o-row td:nth-child(2) {
+        flex: 1 1 0;
+      }
+      .t tr.o-row td:nth-child(3) {
+        flex-basis: 100%;
+        padding-top: 0;
+        color: var(--muted);
+      }
+      .t tr.o-row td.r {
+        padding-top: 0.1rem;
+        text-align: left;
+      }
+      .t tr.o-row td.r + td.r::before {
+        content: '· ';
+      }
+      .t tr.o-detail td:first-child,
+      .t tfoot td:empty {
+        display: none;
+      }
+      .t tfoot tr {
+        display: flex;
+        justify-content: space-between;
+        border-top: 2px solid var(--rule);
+      }
+      .t tfoot th,
+      .t tfoot td {
+        border-top: 0;
       }
     }
     @media print {

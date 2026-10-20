@@ -62,10 +62,10 @@ const R = WORKTIME_RULES;
           <header class="s-head">
             <div>
               <aon-logo [size]="1.15" />
-              <p class="kicker">{{ scopeLabel() }}</p>
+              <p class="kicker">{{ org.name() ? org.name() + ' · ' : '' }}{{ scopeLabel() }}</p>
             </div>
             <div class="s-titleblock">
-              <h1 class="s-title">{{ org.titled(i18n.t('pdf.docDaily')) }}</h1>
+              <h1 class="s-title">{{ i18n.t('pdf.docDaily') }}</h1>
               <p class="s-date">{{ i18n.dateLong(d.date) }}</p>
             </div>
           </header>
@@ -227,7 +227,7 @@ const R = WORKTIME_RULES;
           </section>
 
           <footer class="s-foot">
-            <span>{{ org.titled(i18n.t('pdf.docDaily')) }} · {{ i18n.dateShort(d.date) }}</span>
+            <span>{{ i18n.t('pdf.docDaily') }} · {{ i18n.dateShort(d.date) }}</span>
             <span class="num">{{ docNo() }}</span>
           </footer>
         </article>
