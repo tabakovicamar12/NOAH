@@ -26,8 +26,6 @@ npm run dev:api              # API na http://localhost:8787
 npm start                    # aplikacija na http://localhost:4200 (preusmeri /api na :8787)
 ```
 
-Demo računi po `seed-demo`: vodja `vodja` / `vodja-demo-2026`, delavec `delavec` / `delavec-demo-2026`.
-
 Predstavitev brez strežnika (vse v brskalniku): `npm run start:demo`.
 
 Produkcijska gradnja, tako kot na Renderju: `npm run build` in nato `npm run start:prod` (http://localhost:8787 streže aplikacijo in API).
