@@ -128,6 +128,10 @@ export const EN: Dictionary = {
 
   'orders.title': 'My work orders',
   'home.search': 'Search orders',
+  'home.scopeLabel': 'Site',
+  'home.scopeAll': 'All sites',
+  'home.scopeProject': 'Whole project',
+  'home.scopeEmpty': 'No open orders here.',
   'home.sort': 'Sort',
   'home.sortDue': 'By deadline',
   'home.sortCode': 'By number',

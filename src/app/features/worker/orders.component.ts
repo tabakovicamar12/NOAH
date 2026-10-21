@@ -156,9 +156,29 @@ function toLocalInput(ms: number): string {
           <p class="muted mt">{{ i18n.t('orders.emptyHint') }}</p>
         </div>
       }
-      @if (listOrders().length) {
-        @if (listOrders().length > 4) {
-          <div class="tools">
+      @if (multiSite() || openCount() > 4) {
+        <div class="tools">
+          @if (multiSite()) {
+            <label class="scope" [class.is-set]="!!activeScope()">
+              <span class="sr-only">{{ i18n.t('home.scopeLabel') }}</span>
+              <aon-icon name="pin" [size]="17" />
+              <select (change)="scope.set($any($event.target).value); showAll.set(false)">
+                <option value="" [selected]="!activeScope()">{{ i18n.t('home.scopeAll') }}</option>
+                @for (g of scopeGroups(); track g.id) {
+                  <optgroup [label]="g.name">
+                    @if (g.sites.length > 1) {
+                      <option [value]="'p:' + g.id" [selected]="activeScope() === 'p:' + g.id">{{ i18n.t('home.scopeProject') }}</option>
+                    }
+                    @for (s of g.sites; track s.id) {
+                      <option [value]="'s:' + s.id" [selected]="activeScope() === 's:' + s.id">{{ s.name }}</option>
+                    }
+                  </optgroup>
+                }
+              </select>
+              <aon-icon name="chevron-down" [size]="17" class="scope-chev" />
+            </label>
+          }
+          @if (openCount() > 4) {
             <label class="search">
               <span class="sr-only">{{ i18n.t('home.search') }}</span>
               <aon-icon name="search" [size]="17" />
@@ -168,8 +188,10 @@ function toLocalInput(ms: number): string {
               <button type="button" class="flt-btn" [attr.aria-pressed]="orderSort() === 'due'" (click)="orderSort.set('due')">{{ i18n.t('home.sortDue') }}</button>
               <button type="button" class="flt-btn" [attr.aria-pressed]="orderSort() === 'code'" (click)="orderSort.set('code')">{{ i18n.t('home.sortCode') }}</button>
             </div>
-          </div>
-        }
+          }
+        </div>
+      }
+      @if (listOrders().length || activeScope()) {
         <ul class="nexts">
           @for (o of shownOrders(); track o.id) {
             <li class="nx" [class.is-bad]="o.status === 'ISSUE'" [style.view-transition-name]="morphId() === o.id ? 'order-morph' : null">
@@ -198,7 +220,7 @@ function toLocalInput(ms: number): string {
               }
             </li>
           } @empty {
-            <li class="none">{{ i18n.t('home.noMatch') }}</li>
+            <li class="none">{{ i18n.t(activeScope() && !orderQuery().trim() ? 'home.scopeEmpty' : 'home.noMatch') }}</li>
           }
         </ul>
         @if (!showAll() && matchingOrders().length > 6) {
@@ -418,6 +440,14 @@ function toLocalInput(ms: number): string {
     .search:focus-within { border-color: var(--color-gold); box-shadow: 0 0 0 3px rgb(193 160 80 / 0.25); }
     .search input { width: 100%; min-width: 0; border: 0; background: transparent; color: var(--color-text); font-size: 1rem; outline: none; }
     .sorter .flt-btn { min-height: 2.6rem; }
+    .scope { position: relative; display: flex; flex: 1 1 100%; align-items: center; min-height: 2.9rem; border: 1px solid var(--color-line-strong); border-radius: 0.75rem; background: var(--color-panel); color: var(--color-text-muted); }
+    .scope > aon-icon:first-of-type { position: absolute; left: 0.8rem; pointer-events: none; }
+    .scope-chev { position: absolute; right: 0.8rem; pointer-events: none; }
+    .scope select { width: 100%; min-height: 2.9rem; padding: 0 2.4rem 0 2.35rem; border: 0; border-radius: inherit; background: transparent; color: var(--color-text); font-size: 1rem; font-weight: 500; text-overflow: ellipsis; appearance: none; cursor: pointer; }
+    .scope:focus-within { border-color: var(--color-gold); box-shadow: 0 0 0 3px rgb(193 160 80 / 0.25); }
+    /* a chosen object narrows the list: it reads as set */
+    .scope.is-set { border-color: var(--color-gold); background: var(--color-gold-fill); color: var(--color-gold-ink); }
+    .scope.is-set select { font-weight: 650; }
     .nexts { display: grid; gap: 0.5rem; margin-top: 0.6rem; }
     .nx { display: flex; align-items: center; gap: 0.5rem; padding-right: 0.7rem; border-radius: 1rem; background: var(--color-panel); box-shadow: 0 1px 2px rgb(20 20 20 / 0.05); }
     .nx.is-bad { background: var(--color-bad-tint); }
@@ -491,6 +521,9 @@ function toLocalInput(ms: number): string {
       }
       .nexts {
         grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+      }
+      .scope {
+        flex: 0 1 22rem;
       }
     }
     /* A phone on its side: keep the clock and the order, drop the drawing and the notes. */
@@ -589,7 +622,8 @@ export class OrdersComponent {
   /** Orders by what they need: the running one, the ones to do, problems, and the finished ones. */
   protected readonly groups = computed(() => {
     const run = this.runningId();
-    const all = this.store.orders();
+    const scope = this.activeScope();
+    const all = this.store.orders().filter((o) => !scope || scope === `p:${o.projectId}` || scope === `s:${o.siteId}`);
     return {
       running: all.filter((o) => o.id === run),
       todo: all.filter((o) => o.id !== run && (o.status === 'NEW' || o.status === 'IN_PROGRESS')),
@@ -597,6 +631,32 @@ export class OrdersComponent {
       done: all.filter((o) => o.id !== run && o.status === 'COMPLETED'),
     };
   });
+  /** The worker's projects and objects, read from the orders ("Projekt · Objekt"), for the object picker. */
+  protected readonly scopeGroups = computed(() => {
+    const projects = new Map<string, { id: string; name: string; sites: Map<string, string> }>();
+    for (const o of this.store.orders()) {
+      const [project = '', ...rest] = o.siteName.split(' · ');
+      const group = projects.get(o.projectId) ?? { id: o.projectId, name: project, sites: new Map<string, string>() };
+      group.sites.set(o.siteId, rest.join(' · ') || project);
+      projects.set(o.projectId, group);
+    }
+    const byName = (a: { name: string }, b: { name: string }): number => a.name.localeCompare(b.name, this.i18n.locale(), { numeric: true });
+    return [...projects.values()]
+      .map((g) => ({ id: g.id, name: g.name, sites: [...g.sites].map(([id, name]) => ({ id, name })).sort(byName) }))
+      .sort(byName);
+  });
+  /** The picker only shows when the orders are spread over more than one object. */
+  protected readonly multiSite = computed(() => this.scopeGroups().reduce((n, g) => n + g.sites.length, 0) > 1);
+  /** `p:<projectId>`, `s:<siteId>` or '' for all. */
+  protected readonly scope = signal('');
+  /** The chosen scope while it still has orders; one that emptied out falls back to all. */
+  protected readonly activeScope = computed(() => {
+    const scope = this.scope();
+    const known = this.scopeGroups().some((g) => scope === `p:${g.id}` || g.sites.some((s) => scope === `s:${s.id}`));
+    return known ? scope : '';
+  });
+  /** Open orders across every object, so search and sort stay put while the picker narrows the list. */
+  protected readonly openCount = computed(() => this.store.orders().filter((o) => o.id !== this.runningId() && o.status !== 'COMPLETED').length);
   /** The one thing to do now, in plain words. */
   protected readonly nextStep = computed((): { key: TranslationKey; params?: Record<string, string> } => {
     if (this.store.openShift()) {

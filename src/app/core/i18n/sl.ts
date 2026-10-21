@@ -126,6 +126,10 @@ export const SL = {
 
   'orders.title': 'Moji delovni nalogi',
   'home.search': 'Išči nalog',
+  'home.scopeLabel': 'Objekt',
+  'home.scopeAll': 'Vsi objekti',
+  'home.scopeProject': 'Ves projekt',
+  'home.scopeEmpty': 'Tu nimate odprtih nalogov.',
   'home.sort': 'Razvrsti',
   'home.sortDue': 'Po roku',
   'home.sortCode': 'Po številki',
