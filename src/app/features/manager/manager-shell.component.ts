@@ -272,11 +272,37 @@ interface NavItem {
       line-height: 1.5rem;
       text-align: center;
     }
-    /* Project list in the rail: a status dot, the name, open orders. */
+    /* Project list in the rail: a status dot, the name, open orders. With many projects only the list
+       scrolls; the navigation above and the profile below stay in view. */
+    .brand,
+    .nav,
+    .me {
+      flex-shrink: 0;
+    }
     .pd {
+      display: flex;
+      flex: 0 1 auto;
+      flex-direction: column;
+      min-height: 0;
       margin-top: 1.4rem;
       padding: 1.1rem 0.8rem 0;
       border-top: 1px solid var(--color-rail-rule);
+    }
+    .pd > * {
+      flex-shrink: 0;
+    }
+    /* the scrolling list clips anything outside it, so the focus ring sits inside the row */
+    .pd-list .pd-row:focus-visible,
+    .pd-list .pd-sites a:focus-visible {
+      outline-offset: -2px;
+    }
+    .pd > .pd-list {
+      flex-shrink: 1;
+      min-height: 3rem;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: var(--color-rail-rule) transparent;
     }
     .pd-head {
       display: flex;
@@ -302,8 +328,10 @@ interface NavItem {
     }
     .pd-list {
       display: grid;
+      align-content: start;
       gap: 0;
       margin-top: 0.45rem;
+      padding-bottom: 0.4rem;
     }
     .pd-row {
       display: flex;
