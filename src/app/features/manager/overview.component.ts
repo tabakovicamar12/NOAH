@@ -14,7 +14,7 @@ import { OrderDrillComponent } from './order-drill.component';
 import { avatarTone, initialsOf } from './person';
 import { ReportReviewComponent } from './report-review.component';
 
-type SortKey = 'code' | 'title' | 'worker' | 'status' | 'progress';
+type SortKey = 'code' | 'title' | 'where' | 'worker' | 'status' | 'progress';
 type Panel = { readonly kind: 'order'; readonly id: string } | { readonly kind: 'report'; readonly id: string };
 type StatusTab = 'ALL' | WorkOrderStatus;
 
@@ -22,6 +22,8 @@ type StatusTab = 'ALL' | WorkOrderStatus;
 interface OrderRow extends OrderOverview {
   readonly pending: boolean;
   readonly crewNames: readonly string[];
+  readonly projectName: string;
+  readonly siteLabel: string;
 }
 
 const STATUS_RANK: Readonly<Record<WorkOrderStatus, number>> = { ISSUE: 0, IN_PROGRESS: 1, NEW: 2, COMPLETED: 3 };
@@ -164,7 +166,16 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
                           (click)="$event.stopPropagation(); openRow(row)"
                         >{{ row.order.code ?? i18n.t('form.numberPending') }}</button>
                       </td>
-                      <td class="c-title"><span class="clamp">{{ row.order.title }}</span></td>
+                      <td class="c-title">
+                        <span class="clamp">{{ row.order.title }}</span>
+                        <span class="where-inline">{{ row.projectName }} · {{ row.siteLabel }}</span>
+                      </td>
+                      <td class="c-where">
+                        <span class="where" [title]="row.order.siteName">
+                          <span class="where-p">{{ row.projectName }}</span>
+                          <span class="where-s">{{ row.siteLabel }}</span>
+                        </span>
+                      </td>
                       <td class="c-worker">
                         @if (row.crewNames.length) {
                           <span class="who">
@@ -197,7 +208,7 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
                     </tr>
                   } @empty {
                     <tr>
-                      <td colspan="5" class="empty">
+                      <td colspan="6" class="empty">
                         <p>{{ i18n.t('mgr.noResults') }}</p>
                         <button type="button" class="empty-btn" (click)="clearFilters()">{{ i18n.t('mgr.clearFilters') }}</button>
                       </td>
@@ -595,7 +606,7 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
     }
     .tbl {
       width: 100%;
-      min-width: 38rem;
+      min-width: 46rem;
       table-layout: fixed;
       border-collapse: collapse;
       font-size: 1.04rem;
@@ -649,14 +660,66 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
     }
     .c-code {
       /* The code never wraps into the title on a narrower office screen. */
-      width: max(14.5%, 8.75rem);
+      width: max(12%, 8.75rem);
       padding-right: 1.5rem !important;
     }
     .c-title {
-      width: 27%;
+      width: 23%;
+    }
+    .c-where {
+      width: 18%;
+    }
+    .where {
+      display: grid;
+      min-width: 0;
+      line-height: 1.25;
+    }
+    .where-p,
+    .where-s {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .where-p {
+      color: var(--color-text-muted);
+      font-size: 0.9rem;
+    }
+    .where-inline {
+      display: none;
+      overflow: hidden;
+      margin-top: 0.15rem;
+      color: var(--color-text-muted);
+      font-size: 0.9rem;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* Narrower screens: where moves under the title, so the names and progress keep their room. */
+    @media (max-width: 1280px) {
+      .tbl .c-where {
+        display: none;
+      }
+      .where-inline {
+        display: block;
+      }
+      .c-code {
+        width: max(14.5%, 8.75rem);
+      }
+      .c-title {
+        width: 27%;
+      }
+      .c-worker {
+        width: 25%;
+      }
+      .c-status {
+        width: 14.5%;
+      }
+      .tbl {
+        min-width: 38rem;
+      }
     }
     .c-worker {
-      width: 25%;
+      width: 19%;
       white-space: nowrap;
     }
     .c-worker .clamp {
@@ -665,7 +728,7 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
       text-overflow: ellipsis;
     }
     .c-status {
-      width: 14.5%;
+      width: 12%;
     }
     .row td {
       height: 4.35rem;
@@ -1049,6 +1112,7 @@ export class OverviewComponent implements OnInit {
   protected readonly cols: ReadonlyArray<{ key: SortKey; label: TranslationKey }> = [
     { key: 'code', label: 'mgr.colId' },
     { key: 'title', label: 'mgr.colTitle' },
+    { key: 'where', label: 'mgr.colWhere' },
     { key: 'worker', label: 'mgr.colOwner' },
     { key: 'status', label: 'mgr.colStatus' },
     { key: 'progress', label: 'mgr.colProgress' },
@@ -1149,12 +1213,18 @@ export class OverviewComponent implements OnInit {
     for (const w of this.data()?.workers ?? []) names.set(w.user.id, w.user.displayName);
     for (const w of this.store.directory()?.workers ?? []) names.set(w.user.id, w.user.displayName);
     const pendingById = new Map(pending.map((p) => [p.id, p]));
+    const projectNames = new Map((this.data()?.projects ?? []).map((p) => [p.id, p.name]));
+    // Project and object apart, from the lists; the denormalised "Projekt · Objekt" covers anything not loaded.
+    const where = (o: { projectId: string; siteId: string; siteName: string }): { projectName: string; siteLabel: string } => {
+      const [project = '', ...rest] = o.siteName.split(' · ');
+      return { projectName: projectNames.get(o.projectId) ?? project, siteLabel: this.siteById().get(o.siteId)?.name ?? (rest.join(' · ') || project) };
+    };
     const rows: OrderRow[] = server.map((r) => {
       const local = pendingById.get(r.order.id);
       const order = local
         ? { ...r.order, title: local.title, location: local.location, crew: local.crewIds.map((id) => ({ id, displayName: names.get(id) ?? id })), published: local.published || r.order.published, plannedQty: local.plannedQty, unit: local.unit }
         : r.order;
-      return { ...r, order, pending: !!local, crewNames: order.crew.map((c) => c.displayName) };
+      return { ...r, order, pending: !!local, crewNames: order.crew.map((c) => c.displayName), ...where(order) };
     });
     for (const p of pending) {
       if (server.some((r) => r.order.id === p.id)) continue;
@@ -1191,6 +1261,8 @@ export class OverviewComponent implements OnInit {
         activeOnDate: p.date === this.store.date() || p.dueDate === this.store.date(),
         pending: true,
         crewNames,
+        projectName: site?.projectName ?? '',
+        siteLabel: site?.name ?? '',
       });
     }
     return rows;
@@ -1232,6 +1304,8 @@ export class OverviewComponent implements OnInit {
           return r.order.code ?? '';
         case 'title':
           return r.order.title;
+        case 'where':
+          return `${r.projectName} ${r.siteLabel}`;
         case 'worker':
           return r.crewNames[0] ?? '￿';
         case 'status':
