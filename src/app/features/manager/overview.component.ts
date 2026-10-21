@@ -48,7 +48,7 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
             <span class="sr-only">{{ i18n.t('mgr.dayLabel') }}</span>
             <span>{{ dayLabel() }}</span>
             <aon-icon name="chevron-down" [size]="18" [stroke]="1.8" />
-            <input type="date" [value]="store.date()" [max]="today" (change)="onDate($event)" />
+            <input type="date" [value]="store.date()" [max]="today" (click)="openCalendar($event)" (change)="onDate($event)" />
           </label>
         </div>
 
@@ -82,8 +82,11 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
         }
 
         <ng-template #scopePicker>
-          @if (scopeProjects().length) {
-            <div class="scope" role="group" [attr.aria-label]="i18n.t('mgr.treeLabel')">
+          <div class="scope" role="group" [attr.aria-label]="i18n.t('mgr.treeLabel')">
+            @if (hasFilters()) {
+              <button type="button" class="reset" (click)="clearFilters()"><aon-icon name="x" [size]="16" [stroke]="2.2" />{{ i18n.t('mgr.clearFilters') }}</button>
+            }
+            @if (scopeProjects().length) {
               <label class="scope-field" [class.is-set]="!!scopeProjectId()">
                 <span class="sr-only">{{ i18n.t('form.project') }}</span>
                 <select (change)="pickProject($any($event.target).value)">
@@ -108,12 +111,12 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
                 </select>
                 <aon-icon name="chevron-down" [size]="16" [stroke]="2" />
               </label>
-            </div>
-          }
+            }
+          </div>
         </ng-template>
 
         <!-- The team and the reports narrow to a project or object the same way the orders do. -->
-        @if (mode() !== 'orders' && data() && scopeProjects().length) {
+        @if (mode() !== 'orders' && data() && (scopeProjects().length || hasFilters())) {
           <div class="filter-bar">
             <ng-container *ngTemplateOutlet="scopePicker" />
           </div>
@@ -356,7 +359,7 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
       flex-wrap: wrap;
       align-items: center;
       gap: 0.4rem 0.6rem;
-      margin: 0 0 0.75rem;
+      margin: 0.9rem 0 0;
       padding: 0.55rem 0.8rem;
       border-radius: 0.6rem;
       background: var(--color-gold-tint);
@@ -538,18 +541,18 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
     }
     .scope {
       display: flex;
-      flex: 1 1 22rem;
-      flex-wrap: wrap;
+      flex: 1 1 auto;
       justify-content: flex-end;
       gap: 0.6rem;
       min-width: 0;
     }
+    /* One line beside the status tabs: the pickers narrow before anything wraps. */
     .scope-field {
       position: relative;
       display: flex;
       align-items: center;
       flex: 0 1 15rem;
-      min-width: 0;
+      min-width: 9rem;
     }
     .scope-field select {
       width: 100%;
@@ -575,6 +578,23 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
       color: var(--color-text);
       font-weight: 600;
     }
+    .reset {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: 0.35rem;
+      height: 2.85rem;
+      padding: 0 0.85rem;
+      border-radius: 0.65rem;
+      color: var(--color-text-muted);
+      font-weight: 500;
+      white-space: nowrap;
+      transition: background-color 150ms var(--ease-out-expo), color 150ms var(--ease-out-expo);
+    }
+    .reset:hover {
+      background: var(--color-field);
+      color: var(--color-text);
+    }
     .scope-field aon-icon {
       position: absolute;
       right: 0.8rem;
@@ -583,7 +603,14 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
     }
     @media (max-width: 900px) {
       .scope {
+        flex-wrap: wrap;
         justify-content: stretch;
+      }
+      /* On a phone the pickers come first and the reset sits under them. */
+      .reset {
+        order: 1;
+        height: 2.5rem;
+        padding: 0 0.5rem;
       }
       .scope-field {
         flex: 1 1 10rem;
@@ -1484,10 +1511,27 @@ export class OverviewComponent implements OnInit {
     void this.router.navigate(['/m'], { queryParams: { ...view, ...(review ? { review } : {}), ...scope } });
   }
 
+  /** Anything narrowing the list: a status tab, a search, a project or object, or a day other than today. */
+  protected readonly hasFilters = computed(
+    () => (this.mode() === 'orders' && this.status() !== 'ALL') || this.words().length > 0 || !!this.site() || !!this.project() || !this.store.isToday(),
+  );
+
+  /** Back to the full list for today, in the same view. */
   protected clearFilters(): void {
     this.status.set('ALL');
     this.store.query.set('');
-    if (this.site() || this.project()) void this.router.navigate(['/m']);
+    if (!this.store.isToday()) this.toToday();
+    if (this.site() || this.project()) this.scopeTo({});
+  }
+
+  /** The whole day button opens the calendar, not only the browser's small icon inside the hidden field. */
+  protected openCalendar(event: Event): void {
+    const input = event.target as HTMLInputElement & { showPicker?: () => void };
+    try {
+      input.showPicker?.();
+    } catch {
+      // Older browsers open it themselves, or not at all; the field still takes typing.
+    }
   }
 
   protected crew(names: readonly string[]): string {
