@@ -721,6 +721,7 @@ export const SL = {
   'mgr.colHoursShort': 'Ure',
   'mgr.colDue': 'Rok',
   'mgr.treeAll': 'Vsi objekti',
+  'mgr.scopeAllProjects': 'Vsi projekti',
   'mgr.treeAllProjects': 'Vsi',
   'mgr.treeFind': 'Najdi projekt',
   'mgr.treeMore': 'Pokaži še {n}',

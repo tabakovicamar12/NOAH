@@ -723,6 +723,7 @@ export const EN: Dictionary = {
   'mgr.colHoursShort': 'Hours',
   'mgr.colDue': 'Due',
   'mgr.treeAll': 'All sites',
+  'mgr.scopeAllProjects': 'All projects',
   'mgr.treeAllProjects': 'All',
   'mgr.treeFind': 'Find project',
   'mgr.treeMore': 'Show {n} more',

@@ -79,9 +79,39 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
         }
 
         @if (mode() === 'orders') {
-          <div class="flt filters" role="group" [attr.aria-label]="i18n.t('mgr.tabsLabel')">
-            @for (t of tabs; track t.id) {
-              <button type="button" class="flt-btn" [attr.aria-pressed]="status() === t.id" (click)="status.set(t.id)">{{ i18n.t(t.label) }}<span class="flt-n">{{ counts()[t.id] }}</span></button>
+          <div class="filter-bar">
+            <div class="flt" role="group" [attr.aria-label]="i18n.t('mgr.tabsLabel')">
+              @for (t of tabs; track t.id) {
+                <button type="button" class="flt-btn" [attr.aria-pressed]="status() === t.id" (click)="status.set(t.id)">{{ i18n.t(t.label) }}<span class="flt-n">{{ counts()[t.id] }}</span></button>
+              }
+            </div>
+            @if (scopeProjects().length) {
+              <div class="scope" role="group" [attr.aria-label]="i18n.t('mgr.treeLabel')">
+                <label class="scope-field" [class.is-set]="!!scopeProjectId()">
+                  <span class="sr-only">{{ i18n.t('form.project') }}</span>
+                  <select (change)="pickProject($any($event.target).value)">
+                    <option value="" [selected]="!scopeProjectId()">{{ i18n.t('mgr.scopeAllProjects') }}</option>
+                    @for (p of scopeProjects(); track p.id) {
+                      <option [value]="p.id" [selected]="p.id === scopeProjectId()">{{ p.name }}</option>
+                    }
+                  </select>
+                  <aon-icon name="chevron-down" [size]="16" [stroke]="2" />
+                </label>
+                <label class="scope-field" [class.is-set]="!!site()">
+                  <span class="sr-only">{{ i18n.t('form.site') }}</span>
+                  <select (change)="pickSite($any($event.target).value)">
+                    <option value="" [selected]="!site()">{{ i18n.t('mgr.treeAll') }}</option>
+                    @for (g of scopeSiteGroups(); track g.project.id) {
+                      <optgroup [label]="g.project.name">
+                        @for (s of g.sites; track s.id) {
+                          <option [value]="s.id" [selected]="s.id === site()">{{ s.name }}</option>
+                        }
+                      </optgroup>
+                    }
+                  </select>
+                  <aon-icon name="chevron-down" [size]="16" [stroke]="2" />
+                </label>
+              </div>
             }
           </div>
 
@@ -476,8 +506,65 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
       color: #fff;
       font-weight: 500;
     }
-    .filters {
+    .filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.6rem 0.75rem;
       margin-top: 1.6rem;
+    }
+    .scope {
+      display: flex;
+      flex: 1 1 22rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 0.6rem;
+      min-width: 0;
+    }
+    .scope-field {
+      position: relative;
+      display: flex;
+      align-items: center;
+      flex: 0 1 15rem;
+      min-width: 0;
+    }
+    .scope-field select {
+      width: 100%;
+      height: 2.85rem;
+      padding: 0 2.3rem 0 0.85rem;
+      border: 1px solid var(--color-line);
+      border-radius: 0.65rem;
+      background: var(--color-panel);
+      color: var(--color-text-muted);
+      font-weight: 500;
+      text-overflow: ellipsis;
+      appearance: none;
+      cursor: pointer;
+      box-shadow: 0 1px 2px rgb(20 20 20 / 0.04);
+    }
+    .scope-field select:focus-visible {
+      border-color: var(--color-gold);
+    }
+    /* A chosen project or object is a filter in force: it reads as set, not as a placeholder. */
+    .scope-field.is-set select {
+      border-color: var(--color-gold);
+      background: var(--color-gold-fill);
+      color: var(--color-text);
+      font-weight: 600;
+    }
+    .scope-field aon-icon {
+      position: absolute;
+      right: 0.8rem;
+      color: var(--color-text-muted);
+      pointer-events: none;
+    }
+    @media (max-width: 900px) {
+      .scope {
+        justify-content: stretch;
+      }
+      .scope-field {
+        flex: 1 1 10rem;
+      }
     }
     .card {
       margin-top: 1.6rem;
@@ -1010,6 +1097,27 @@ export class OverviewComponent implements OnInit {
     return '';
   });
 
+  /** The project the list is scoped to: the chosen one, or the one an object in scope belongs to. */
+  protected readonly scopeProjectId = computed(() => {
+    const site = this.site();
+    return site ? (this.siteById().get(site)?.projectId ?? '') : (this.project() ?? '');
+  });
+
+  /** Projects that have objects, by name, for the project picker. */
+  protected readonly scopeProjects = computed(() => {
+    const withSites = new Set((this.data()?.sites ?? []).map((s) => s.projectId));
+    return (this.data()?.projects ?? []).filter((p) => withSites.has(p.id)).sort((a, b) => a.name.localeCompare(b.name, this.i18n.locale()));
+  });
+
+  /** The object picker: the chosen project's objects, or every object grouped by project. */
+  protected readonly scopeSiteGroups = computed(() => {
+    const project = this.scopeProjectId();
+    const sites = this.data()?.sites ?? [];
+    return this.scopeProjects()
+      .filter((p) => !project || p.id === project)
+      .map((p) => ({ project: p, sites: sites.filter((s) => s.projectId === p.id).sort((a, b) => a.name.localeCompare(b.name, this.i18n.locale(), { numeric: true })) }));
+  });
+
   /** Server rows, with orders saved on this device laid over them until the server confirms. */
   private readonly allRows = computed<readonly OrderRow[]>(() => {
     const server = this.data()?.orders ?? [];
@@ -1261,6 +1369,16 @@ export class OverviewComponent implements OnInit {
   protected selectByCode(code: string): void {
     const row = this.data()?.orders.find((o) => o.order.code === code);
     if (row) void this.router.navigate(['/m'], { queryParams: { order: row.order.id } });
+  }
+
+  /** The scope lives in the URL, so the sidebar tree marks the same project or object. */
+  protected pickProject(id: string): void {
+    void this.router.navigate(['/m'], { queryParams: id ? { project: id } : {} });
+  }
+
+  protected pickSite(id: string): void {
+    const project = this.scopeProjectId();
+    void this.router.navigate(['/m'], { queryParams: id ? { site: id } : project ? { project } : {} });
   }
 
   protected clearFilters(): void {
