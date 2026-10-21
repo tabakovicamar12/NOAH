@@ -1,9 +1,10 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, OnInit, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { I18nService } from '../../core/i18n/i18n.service';
 import type { TranslationKey } from '../../core/i18n/sl';
 import type { OrderOverview, WorkerOverview, WorkerPresence } from '../../core/models/api.models';
-import type { DailySummaryStatus, QuantityUnit, WorkOrderStatus } from '../../core/models/domain.models';
+import type { DailySummary, DailySummaryStatus, QuantityUnit, WorkOrderStatus } from '../../core/models/domain.models';
 import { compareCodes, formatDuration, isIsoDate, toIsoDate } from '../../core/util/util';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { ReportStatusComponent } from '../../shared/ui/report-status.component';
@@ -34,7 +35,7 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
  */
 @Component({
   selector: 'aon-manager-overview',
-  imports: [RouterLink, IconComponent, ReportStatusComponent, OrderDrillComponent, ReportReviewComponent],
+  imports: [NgTemplateOutlet, RouterLink, IconComponent, ReportStatusComponent, OrderDrillComponent, ReportReviewComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown)': 'onKey($event)' },
   template: `
@@ -78,6 +79,44 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
           }
         }
 
+        <ng-template #scopePicker>
+          @if (scopeProjects().length) {
+            <div class="scope" role="group" [attr.aria-label]="i18n.t('mgr.treeLabel')">
+              <label class="scope-field" [class.is-set]="!!scopeProjectId()">
+                <span class="sr-only">{{ i18n.t('form.project') }}</span>
+                <select (change)="pickProject($any($event.target).value)">
+                  <option value="" [selected]="!scopeProjectId()">{{ i18n.t('mgr.scopeAllProjects') }}</option>
+                  @for (p of scopeProjects(); track p.id) {
+                    <option [value]="p.id" [selected]="p.id === scopeProjectId()">{{ p.name }}</option>
+                  }
+                </select>
+                <aon-icon name="chevron-down" [size]="16" [stroke]="2" />
+              </label>
+              <label class="scope-field" [class.is-set]="!!site()">
+                <span class="sr-only">{{ i18n.t('form.site') }}</span>
+                <select (change)="pickSite($any($event.target).value)">
+                  <option value="" [selected]="!site()">{{ i18n.t('mgr.treeAll') }}</option>
+                  @for (g of scopeSiteGroups(); track g.project.id) {
+                    <optgroup [label]="g.project.name">
+                      @for (s of g.sites; track s.id) {
+                        <option [value]="s.id" [selected]="s.id === site()">{{ s.name }}</option>
+                      }
+                    </optgroup>
+                  }
+                </select>
+                <aon-icon name="chevron-down" [size]="16" [stroke]="2" />
+              </label>
+            </div>
+          }
+        </ng-template>
+
+        <!-- The team and the reports narrow to a project or object the same way the orders do. -->
+        @if (mode() !== 'orders' && data() && scopeProjects().length) {
+          <div class="filter-bar">
+            <ng-container *ngTemplateOutlet="scopePicker" />
+          </div>
+        }
+
         @if (mode() === 'orders') {
           <div class="filter-bar">
             <div class="flt" role="group" [attr.aria-label]="i18n.t('mgr.tabsLabel')">
@@ -85,34 +124,7 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
                 <button type="button" class="flt-btn" [attr.aria-pressed]="status() === t.id" (click)="status.set(t.id)">{{ i18n.t(t.label) }}<span class="flt-n">{{ counts()[t.id] }}</span></button>
               }
             </div>
-            @if (scopeProjects().length) {
-              <div class="scope" role="group" [attr.aria-label]="i18n.t('mgr.treeLabel')">
-                <label class="scope-field" [class.is-set]="!!scopeProjectId()">
-                  <span class="sr-only">{{ i18n.t('form.project') }}</span>
-                  <select (change)="pickProject($any($event.target).value)">
-                    <option value="" [selected]="!scopeProjectId()">{{ i18n.t('mgr.scopeAllProjects') }}</option>
-                    @for (p of scopeProjects(); track p.id) {
-                      <option [value]="p.id" [selected]="p.id === scopeProjectId()">{{ p.name }}</option>
-                    }
-                  </select>
-                  <aon-icon name="chevron-down" [size]="16" [stroke]="2" />
-                </label>
-                <label class="scope-field" [class.is-set]="!!site()">
-                  <span class="sr-only">{{ i18n.t('form.site') }}</span>
-                  <select (change)="pickSite($any($event.target).value)">
-                    <option value="" [selected]="!site()">{{ i18n.t('mgr.treeAll') }}</option>
-                    @for (g of scopeSiteGroups(); track g.project.id) {
-                      <optgroup [label]="g.project.name">
-                        @for (s of g.sites; track s.id) {
-                          <option [value]="s.id" [selected]="s.id === site()">{{ s.name }}</option>
-                        }
-                      </optgroup>
-                    }
-                  </select>
-                  <aon-icon name="chevron-down" [size]="16" [stroke]="2" />
-                </label>
-              </div>
-            }
+            <ng-container *ngTemplateOutlet="scopePicker" />
           </div>
 
           @if (data() && !store.isToday()) {
@@ -1064,7 +1076,18 @@ export class OverviewComponent implements OnInit {
     const names = new Map(d.workers.map((w) => [w.user.id, w.user.displayName]));
     const rank: Readonly<Record<DailySummaryStatus, number>> = { SUBMITTED: 0, RETURNED: 1, DRAFT: 2, APPROVED: 3 };
     const words = this.words();
+    const site = this.site();
+    const project = this.project();
+    const orderById = new Map(d.orders.map((o) => [o.order.id, o.order]));
+    // A report is in scope when any order the worker worked on that day is.
+    const inScope = (s: DailySummary): boolean =>
+      (!site && !project) ||
+      s.lines.some((l) => {
+        const o = orderById.get(l.workOrderId);
+        return !!o && (site ? o.siteId === site : o.projectId === project);
+      });
     return [...d.summaries]
+      .filter(inScope)
       .map((s) => ({
         id: s.id,
         name: names.get(s.userId) ?? s.userId,
@@ -1371,14 +1394,20 @@ export class OverviewComponent implements OnInit {
     if (row) void this.router.navigate(['/m'], { queryParams: { order: row.order.id } });
   }
 
-  /** The scope lives in the URL, so the sidebar tree marks the same project or object. */
+  /** The scope lives in the URL, so the sidebar tree marks the same project or object; the view stays as it is. */
   protected pickProject(id: string): void {
-    void this.router.navigate(['/m'], { queryParams: id ? { project: id } : {} });
+    this.scopeTo(id ? { project: id } : {});
   }
 
   protected pickSite(id: string): void {
     const project = this.scopeProjectId();
-    void this.router.navigate(['/m'], { queryParams: id ? { site: id } : project ? { project } : {} });
+    this.scopeTo(id ? { site: id } : project ? { project } : {});
+  }
+
+  private scopeTo(scope: { project?: string; site?: string }): void {
+    const view = this.mode() === 'workers' ? { view: 'workers' } : {};
+    const review = this.review();
+    void this.router.navigate(['/m'], { queryParams: { ...view, ...(review ? { review } : {}), ...scope } });
   }
 
   protected clearFilters(): void {
