@@ -12,7 +12,7 @@ Vsi podatki v preizkusu so testni. Prosim, ne vnašajte resničnih osebnih podat
 
 ## Dostop in prva nastavitev
 
-Aplikacija je dosegljiva na naslovu **[noah-mocha.vercel.app](https://noah-mocha.vercel.app/login)**. Za podjetje sem pripravil administratorski račun `noah-admin`, geslo vam izročim osebno. Ob prijavi izberite vlogo *Vodstvo*. Administrator nato sam ustvari račune za preizkuševalce, zato za preizkus ne potrebujete mene.
+Aplikacija je dosegljiva na naslovu **<https://noah-mocha.vercel.app/login>**. Za podjetje sem pripravil administratorski račun `noah-admin`, geslo vam izročim osebno. Ob prijavi izberite vlogo *Vodstvo*. Administrator nato sam ustvari račune za preizkuševalce, zato za preizkus ne potrebujete mene.
 
 ### 1. Ustvarite račune za preizkuševalce
 
