@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { SessionStore } from '../../core/auth/session.store';
 import { I18nService } from '../../core/i18n/i18n.service';
-import type { QuantityUnit, WorkOrderStatus } from '../../core/models/domain.models';
+import { hasQuantity, type QuantityUnit, type WorkOrderStatus } from '../../core/models/domain.models';
 import { ClockService } from '../../core/ui/clock.service';
 import { ToastService } from '../../core/ui/toast.service';
 import { formatClock } from '../../core/util/util';
@@ -42,7 +42,7 @@ type NoteMode = 'NOTE' | 'ISSUE';
             <p class="no-label">{{ i18n.t('order.numberLabel', { code: o.code ?? '–' }) }}</p>
             <h1 id="order-code" class="title">{{ o.title }}</h1>
             <div class="sub">
-              <span class="w-small">{{ o.location }} · {{ o.siteName }}</span>
+              <span class="w-small">{{ o.location ? o.location + ' · ' : '' }}{{ o.siteName }}</span>
               <span class="w-pill" [attr.data-s]="running() ? 'IN_PROGRESS' : o.status">{{ running() ? i18n.t('orders.running') : i18n.t(statusKey(o.status)) }}</span>
             </div>
             @if (o.dueDate || crewmates().length) {
@@ -107,7 +107,8 @@ type NoteMode = 'NOTE' | 'ISSUE';
             }
           </div>
 
-          <!-- Quantity -->
+          <!-- Quantity: only on orders measured in one; a task is done when it is completed. -->
+          @if (hasQuantity(o)) {
           <section class="w-card" aria-labelledby="qty-title">
             <h2 id="qty-title" class="w-h2">
               {{ i18n.t('order.quantityTitle') }}
@@ -171,6 +172,9 @@ type NoteMode = 'NOTE' | 'ISSUE';
               }
             }
           </section>
+          } @else if (o.status !== 'COMPLETED') {
+            <p class="w-alert is-info"><aon-icon name="check" [size]="18" />{{ i18n.t('order.noQuantityHint') }}</p>
+          }
 
           <aon-order-photos id="photos" class="anchor" [order]="o" [orderLabel]="o.code ?? ''" />
 
@@ -512,6 +516,7 @@ export class OrderDetailComponent {
   readonly id = input.required<string>();
 
   protected readonly progressRatio = progressRatio;
+  protected readonly hasQuantity = hasQuantity;
   protected readonly busy = signal(false);
   protected readonly custom = signal<number | string | null>(null);
   protected readonly mode = signal<NoteMode>('NOTE');
@@ -555,6 +560,7 @@ export class OrderDetailComponent {
     const o = this.order();
     if (!o) return '';
     const photos = this.store.photos().filter((p) => p.workOrderId === o.id).length;
+    if (!hasQuantity(o)) return `${this.elapsed()} · ${this.i18n.t('photo.count', { n: photos })}`;
     return `${this.i18n.t('order.progress', { done: this.i18n.number(o.doneQty), planned: this.i18n.number(o.plannedQty), unit: this.unitLabel() })} · ${this.i18n.t('photo.count', { n: photos })}`;
   });
   protected primary(): Promise<void> {

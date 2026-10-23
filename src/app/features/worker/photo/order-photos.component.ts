@@ -6,6 +6,7 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { ToastService } from '../../../core/ui/toast.service';
 import { PrivacyPrefsService } from '../../../core/privacy/privacy-prefs.service';
 import { BlobUrls } from '../../../shared/ui/blob-urls';
+import { ConfirmDeleteComponent } from '../../../shared/ui/confirm-delete.component';
 import { NoticeSheetComponent, type NoticePoint } from '../../../shared/ui/notice-sheet.component';
 import { IconComponent } from '../../../shared/ui/icon.component';
 import { WorkerStore } from '../data/worker-store.service';
@@ -27,7 +28,7 @@ const SUGGESTED: Readonly<Record<WorkOrderStatus, PhotoCategory>> = {
  */
 @Component({
   selector: 'aon-order-photos',
-  imports: [IconComponent, PhotoReviewComponent, NoticeSheetComponent],
+  imports: [ConfirmDeleteComponent, IconComponent, PhotoReviewComponent, NoticeSheetComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="w-card" aria-labelledby="photos-title">
@@ -69,7 +70,12 @@ const SUGGESTED: Readonly<Record<WorkOrderStatus, PhotoCategory>> = {
             @if (list.length) {
               <ul class="ph-strip">
                 @for (p of list; track p.id) {
-                  <li>
+                  <li class="relative">
+                    @if (canDelete()) {
+                      <button type="button" class="thumb-del" [attr.aria-label]="i18n.t('photo.deleteAria', { time: i18n.time(p.createdAt) })" (click)="askRemove(p)">
+                        <aon-icon name="x" [size]="15" [stroke]="2.5" />
+                      </button>
+                    }
                     <button type="button" class="thumb" [attr.aria-label]="i18n.t('photo.openAria', { category: i18n.t(catKey(p.category)), time: i18n.time(p.createdAt) })" (click)="viewing.set(p)">
                       <img [src]="previewUrl(p)" alt="" class="aspect-square w-full object-cover" />
                       <span class="thumb-cap" [class.is-bad]="p.category === 'ISSUE'">{{ i18n.time(p.createdAt) }}<aon-icon [name]="p.synced ? 'circle-check' : 'refresh'" [size]="12" [stroke]="2.5" /></span>
@@ -120,13 +126,25 @@ const SUGGESTED: Readonly<Record<WorkOrderStatus, PhotoCategory>> = {
               · {{ i18n.t('photo.masks', { n: p.maskCount }) }}
             }
           </p>
-          @if (!p.synced) {
-            <button type="button" class="w-btn w-btn-line del" (click)="remove(p)">
+          @if (canDelete()) {
+            <button type="button" class="w-btn w-btn-line del" (click)="askRemove(p)">
               <aon-icon name="trash" [size]="18" />{{ i18n.t('photo.delete') }}
             </button>
           }
         </div>
       </div>
+    }
+
+    @if (removing(); as r) {
+      <aon-confirm-delete
+        [heading]="i18n.t('photo.deleteTitle')"
+        [points]="[i18n.t(r.synced ? 'photo.deleteWhatServer' : 'photo.deleteWhatLocal'), i18n.t('delete.irreversible')]"
+        [confirmLabel]="i18n.t('photo.delete')"
+        [busy]="removeBusy()"
+        [error]="removeError()"
+        (confirmed)="remove(r)"
+        (cancelled)="removing.set(null)"
+      />
     }
 
     @if (cameraNotice()) {
@@ -298,6 +316,31 @@ const SUGGESTED: Readonly<Record<WorkOrderStatus, PhotoCategory>> = {
     .del {
       color: var(--color-bad);
     }
+    /* Remove sits on the photo's corner: a full 2.75rem target, drawn as a small dark disc. */
+    .thumb-del {
+      position: absolute;
+      top: 0;
+      right: 0;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      width: 2.75rem;
+      height: 2.75rem;
+      color: #fff;
+    }
+    .thumb-del::before {
+      content: '';
+      position: absolute;
+      inset: 0.55rem;
+      z-index: -1;
+      border-radius: 9999px;
+      background: rgb(30 30 30 / 0.78);
+      box-shadow: 0 0 0 2px #fff;
+    }
+    .thumb-del:hover::before,
+    .thumb-del:focus-visible::before {
+      background: var(--color-bad);
+    }
   `,
 })
 export class OrderPhotosComponent {
@@ -444,13 +487,30 @@ export class OrderPhotosComponent {
     }
     this.gallery().nativeElement.click();
   }
+  /** Own photos can go until the day's report is submitted; after that they belong to what the manager signs. */
+  protected readonly canDelete = computed(() => !this.store.dayClosed());
+  protected readonly removing = signal<LocalPhoto | null>(null);
+  protected readonly removeBusy = signal(false);
+  protected readonly removeError = signal<string | null>(null);
+
+  protected askRemove(p: LocalPhoto): void {
+    this.removeError.set(null);
+    this.removing.set(p);
+  }
+
   protected async remove(p: LocalPhoto): Promise<void> {
+    if (this.removeBusy()) return;
+    this.removeBusy.set(true);
+    this.removeError.set(null);
     try {
       await this.store.deletePhoto(p.id);
+      this.removing.set(null);
       this.viewing.set(null);
       this.toast.show(this.i18n.t('photo.deleted'));
     } catch (err: unknown) {
-      this.toast.error(workflowMessage(this.i18n, err));
+      this.removeError.set(workflowMessage(this.i18n, err));
+    } finally {
+      this.removeBusy.set(false);
     }
   }
 }

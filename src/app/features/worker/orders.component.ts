@@ -3,7 +3,7 @@ import { RouterLink } from '@angular/router';
 import { SessionStore } from '../../core/auth/session.store';
 import { I18nService } from '../../core/i18n/i18n.service';
 import type { TranslationKey } from '../../core/i18n/sl';
-import type { QuantityUnit, WorkOrderStatus } from '../../core/models/domain.models';
+import { hasQuantity, type QuantityUnit, type WorkOrderStatus } from '../../core/models/domain.models';
 import { ClockService } from '../../core/ui/clock.service';
 import { ToastService } from '../../core/ui/toast.service';
 import { compareCodes, formatDuration, toIsoDate } from '../../core/util/util';
@@ -117,10 +117,12 @@ function toLocalInput(ms: number): string {
               {{ order.siteName || order.location }}@if (dueLabel(order); as due) {<span class="due" [class.is-late]="due.late"> · {{ due.text }}</span>}
             </p>
           </div>
-          <div class="act-qty">
-            <span class="bar" role="img" [attr.aria-label]="i18n.t('order.progress', { done: i18n.number(order.doneQty), planned: i18n.number(order.plannedQty), unit: i18n.t(unitKey(order.unit)) })"><span [style.width.%]="ratio(order) * 100"></span></span>
-            <b class="num">{{ i18n.number(order.doneQty) }} / {{ i18n.number(order.plannedQty) }} {{ i18n.t(unitKey(order.unit)) }}</b>
-          </div>
+          @if (hasQuantity(order)) {
+            <div class="act-qty">
+              <span class="bar" role="img" [attr.aria-label]="i18n.t('order.progress', { done: i18n.number(order.doneQty), planned: i18n.number(order.plannedQty), unit: i18n.t(unitKey(order.unit)) })"><span [style.width.%]="ratio(order) * 100"></span></span>
+              <b class="num">{{ i18n.number(order.doneQty) }} / {{ i18n.number(order.plannedQty) }} {{ i18n.t(unitKey(order.unit)) }}</b>
+            </div>
+          }
           <div class="tools4">
             @for (p of activePhotos(); track p.id) {
               <a class="tile thumb" [routerLink]="['/w/orders', order.id]" fragment="photos" [attr.aria-label]="i18n.t('home.photoOf', { code: order.code ?? '' })">
@@ -136,12 +138,14 @@ function toLocalInput(ms: number): string {
               <span>{{ i18n.t('home.noteShort') }}</span>
             </a>
           </div>
+          @if (hasQuantity(order)) {
           <div class="plus-wrap">
           @for (fx of plusFx(); track fx) {
             <span class="fx" aria-hidden="true">+1 {{ i18n.t(unitKey(order.unit)) }}</span>
           }
           <button type="button" class="plus" [disabled]="busy()" (click)="addOne(order.id)"><aon-icon name="plus" [size]="22" [stroke]="2.8" />1 {{ i18n.t(unitKey(order.unit)) }}</button>
           </div>
+          }
         </section>
       }
       </div>
@@ -202,7 +206,11 @@ function toLocalInput(ms: number): string {
                   @if (o.status === 'ISSUE') {
                     <span class="nx-flag">{{ i18n.t(statusKey(o.status)) }}</span>
                   }
-                  <span class="num">{{ i18n.number(o.doneQty) }} / {{ i18n.number(o.plannedQty) }} {{ i18n.t(unitKey(o.unit)) }}</span>
+                  @if (hasQuantity(o)) {
+                    <span class="num">{{ i18n.number(o.doneQty) }} / {{ i18n.number(o.plannedQty) }} {{ i18n.t(unitKey(o.unit)) }}</span>
+                  } @else {
+                    <span>{{ i18n.t('order.noQuantity') }}</span>
+                  }
                   @if (dueLabel(o); as due) {
                     <span class="due" [class.is-late]="due.late">{{ due.text }}</span>
                   }
@@ -685,6 +693,8 @@ export class OrdersComponent {
       : [...list].sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999'));
   });
   protected readonly shownOrders = computed(() => (this.showAll() ? this.matchingOrders() : this.matchingOrders().slice(0, 6)));
+
+  protected readonly hasQuantity = hasQuantity;
 
   protected ratio(o: { doneQty: number; plannedQty: number }): number {
     return progressRatio(o.doneQty, o.plannedQty);

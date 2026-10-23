@@ -4,17 +4,19 @@ import { photoFromStore, type LocalLogEntry, type LocalPhoto, type LocalSummary,
 import { DatabaseService } from '../../../core/db/database.service';
 import { liveSignal } from '../../../core/db/live';
 import { ApiClient } from '../../../core/http/api-client.service';
-import type {
-  EpochMs,
-  LogEntry,
-  Material,
-  PhotoCategory,
-  PhotoMeta,
-  ReportOrderLine,
-  Site,
-  TimeCorrection,
-  TimeEntry,
-  WorkOrderStatus,
+import { ApiError } from '../../../core/models/api.models';
+import {
+  hasQuantity,
+  type EpochMs,
+  type LogEntry,
+  type Material,
+  type PhotoCategory,
+  type PhotoMeta,
+  type ReportOrderLine,
+  type Site,
+  type TimeCorrection,
+  type TimeEntry,
+  type WorkOrderStatus,
 } from '../../../core/models/domain.models';
 import { NetworkStatusService } from '../../../core/network/network-status.service';
 import { SyncEngine } from '../../../core/sync/sync-engine.service';
@@ -48,6 +50,7 @@ export class WorkflowError extends Error {
       | 'REPORT_LOCKED'
       | 'DAY_CLOSED'
       | 'NO_SITE'
+      | 'OFFLINE'
       | 'STORAGE_FULL',
   ) {
     super(code);
@@ -458,6 +461,8 @@ export class WorkerStore {
     if (this.dayClosed()) throw new WorkflowError('DAY_CLOSED');
     if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 100_000) throw new WorkflowError('INVALID_INPUT');
     const order = this.findOrder(orderId);
+    // A task without a quantity is done by completing it; the server refuses quantities on it too.
+    if (!hasQuantity(order)) throw new WorkflowError('INVALID_INPUT');
     const q = Math.round(quantity * 100) / 100;
     const log = this.newLog(uid, orderId, 'QUANTITY', q, null);
     await this.db.transaction('rw', [this.db.logs, this.db.workOrders, this.db.syncQueue], async () => {
@@ -562,11 +567,27 @@ export class WorkerStore {
   }
 
   /** A photo can be withdrawn only while it is still on the device and not uploaded. */
+  /**
+   * The worker takes back their own photo while that day's report is open. One still on the device just
+   * leaves the queue; one already on the server is deleted there first, which needs the network.
+   */
   async deletePhoto(photoId: string): Promise<void> {
     const uid = this.requireUid();
+    const photo = await this.db.photos.get(photoId);
+    if (!photo || photo.userId !== uid) throw new WorkflowError('NOT_FOUND');
+    const date = toIsoDate(photo.createdAt);
+    const summary = await this.db.summaries.get(`sum-${uid}-${date}`);
+    if (summary && summary.status !== 'DRAFT' && summary.status !== 'RETURNED') throw new WorkflowError('REPORT_LOCKED');
+    if (photo.synced === 1) {
+      if (!this.network.online()) throw new WorkflowError('OFFLINE');
+      try {
+        await this.api.deletePhoto(photoId, date);
+      } catch (err: unknown) {
+        if (err instanceof ApiError && err.kind === 'CONFLICT') throw new WorkflowError('REPORT_LOCKED');
+        if (!(err instanceof ApiError && err.kind === 'NOT_FOUND')) throw err;
+      }
+    }
     await this.db.transaction('rw', [this.db.photos, this.db.syncQueue], async () => {
-      const photo = await this.db.photos.get(photoId);
-      if (!photo || photo.userId !== uid || photo.synced === 1) throw new WorkflowError('INVALID_TRANSITION');
       await this.db.syncQueue.where('entityKey').equals(entityKeys.photo(photoId)).delete();
       await this.db.photos.delete(photoId);
     });

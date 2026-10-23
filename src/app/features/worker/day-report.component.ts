@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signa
 import { RouterLink } from '@angular/router';
 import { SessionStore } from '../../core/auth/session.store';
 import { I18nService } from '../../core/i18n/i18n.service';
-import type { DailySummaryStatus, Material, QuantityUnit, ReportOrderLine, TimeCorrection } from '../../core/models/domain.models';
+import { hasQuantity, type DailySummaryStatus, type Material, type QuantityUnit, type ReportOrderLine, type TimeCorrection } from '../../core/models/domain.models';
 import { ToastService } from '../../core/ui/toast.service';
 import { formatDuration } from '../../core/util/util';
 import { HoldButtonComponent } from '../../shared/ui/hold-button.component';
@@ -159,7 +159,11 @@ function toTimeInput(ms: number): string {
                   <p class="line-time">{{ duration(line.minutes) }}</p>
                 </div>
                 <p class="w-small w-muted mt-1.5">
-                  {{ i18n.t('order.quantityTitle') }} <b class="text-[var(--color-text)]">{{ i18n.number(line.quantity) }} {{ i18n.t(unitKey(line.unit)) }}</b>
+                  @if (measured(line)) {
+                    {{ i18n.t('order.quantityTitle') }} <b class="text-[var(--color-text)]">{{ i18n.number(line.quantity) }} {{ i18n.t(unitKey(line.unit)) }}</b>
+                  } @else {
+                    {{ i18n.t('order.noQuantity') }}
+                  }
                   · {{ i18n.t('day.photos') }} <b class="text-[var(--color-text)]">{{ line.photoCount }}</b>
                 </p>
 
@@ -219,6 +223,15 @@ function toTimeInput(ms: number): string {
                             [value]="m.unit ?? ''"
                             (input)="setMaterial(line, i, { unit: $any($event.target).value || null })"
                           />
+                          <button
+                            type="button"
+                            class="icon-btn"
+                            [attr.aria-label]="i18n.t('form.removeMaterial', { name: m.name || i18n.t('form.materialName') })"
+                            [title]="i18n.t('common.remove')"
+                            (click)="removeMaterial(line, i)"
+                          >
+                            <aon-icon name="x" [size]="18" />
+                          </button>
                         </li>
                       }
                     </ul>
@@ -369,7 +382,8 @@ function toTimeInput(ms: number): string {
     }
     .mat {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 4.75rem 3.25rem;
+      grid-template-columns: minmax(0, 1fr) 4.75rem 3.25rem 2.75rem;
+      align-items: center;
       gap: 0.35rem;
     }
   `,
@@ -441,6 +455,12 @@ export class DayReportComponent {
     return `unit.${unit}`;
   }
 
+  /** A line of a task without a quantity shows no "0 kos"; unknown orders (no longer on the device) keep it. */
+  protected measured(line: ReportOrderLine): boolean {
+    const order = this.store.orders().find((o) => o.id === line.workOrderId);
+    return !order || hasQuantity(order) || line.quantity !== 0;
+  }
+
   protected workDone(line: ReportOrderLine): string {
     return this.draft().workDone[line.workOrderId] ?? line.workDone;
   }
@@ -465,6 +485,12 @@ export class DayReportComponent {
 
   protected addMaterial(line: ReportOrderLine): void {
     const list = [...this.materials(line), { name: '', qty: null, unit: null }];
+    this.patch({ materials: { ...this.draft().materials, [line.workOrderId]: list } });
+  }
+
+  /** A draft row, so no confirmation: it is one tap to add back. Planned materials the crew did not use go too. */
+  protected removeMaterial(line: ReportOrderLine, index: number): void {
+    const list = this.materials(line).filter((_, i) => i !== index);
     this.patch({ materials: { ...this.draft().materials, [line.workOrderId]: list } });
   }
 

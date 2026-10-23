@@ -94,6 +94,11 @@ export class ApiClient {
     return firstValueFrom(this.http.post<void>(`${this.base}/photos`, file, { headers }));
   }
 
+  /** The worker's own photo, while that day's report is open; `date` is the photo's day on this device. */
+  deletePhoto(id: string, date: IsoDate): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`${this.base}/photos/${encodeURIComponent(id)}`, { params: new HttpParams().set('date', date) }));
+  }
+
   upsertSummary(body: DailySummaryUpsert, opId: string): Promise<void> {
     return this.mutate('PUT', `/daily-summaries/${encodeURIComponent(body.id)}`, body, opId);
   }
@@ -142,6 +147,21 @@ export class ApiClient {
 
   updateSite(id: string, body: SiteUpdate): Promise<void> {
     return firstValueFrom(this.http.patch<void>(`${this.base}/admin/sites/${encodeURIComponent(id)}`, body));
+  }
+
+  /** Only when nothing was recorded on it; otherwise the server answers 409 HAS_RECORDS. */
+  deleteProject(id: string): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`${this.base}/admin/projects/${encodeURIComponent(id)}`));
+  }
+
+  /** Only when nothing was recorded on it; otherwise the server answers 409 HAS_RECORDS. */
+  deleteSite(id: string): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`${this.base}/admin/sites/${encodeURIComponent(id)}`));
+  }
+
+  /** Only when nobody has logged time, quantities, notes or photos on it; otherwise 409 HAS_RECORDS. */
+  deleteWorkOrder(id: string): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(`${this.base}/admin/work-orders/${encodeURIComponent(id)}`));
   }
 
   setProjectManagers(id: string, body: AssignmentUpdate): Promise<void> {

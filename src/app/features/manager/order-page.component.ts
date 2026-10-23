@@ -1,10 +1,13 @@
 import { DOCUMENT, NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { I18nService } from '../../core/i18n/i18n.service';
+import { NetworkStatusService } from '../../core/network/network-status.service';
+import { ToastService } from '../../core/ui/toast.service';
+import { ConfirmDeleteComponent } from '../../shared/ui/confirm-delete.component';
 import { OrgService } from '../../core/org/org.service';
 import type { TranslationKey } from '../../core/i18n/sl';
-import type { PhotoView, WorkOrderDetailResponse } from '../../core/models/api.models';
+import { ApiError, type PhotoView, type WorkOrderDetailResponse } from '../../core/models/api.models';
 import { PHOTO_CATEGORIES, type LogEntry, type PhotoCategory, type TimeEntry, type WorkOrderStatus } from '../../core/models/domain.models';
 import { ClockService } from '../../core/ui/clock.service';
 import { minutesBetween, toIsoDate } from '../../core/util/util';
@@ -43,7 +46,7 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
  */
 @Component({
   selector: 'aon-order-page',
-  imports: [RouterLink, NgTemplateOutlet, IconComponent, LogoComponent, ReportStatusComponent],
+  imports: [RouterLink, NgTemplateOutlet, ConfirmDeleteComponent, IconComponent, LogoComponent, ReportStatusComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(document:keydown.escape)': 'openPhoto.set(null); crewOpen.set(false)',
@@ -58,8 +61,22 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
           <div class="tools">
             <a class="tool" [routerLink]="['/m/orders', d.order.id, 'edit']"><aon-icon name="pencil" [size]="17" />{{ i18n.t('drill.edit') }}</a>
             <a class="tool" routerLink="/m/orders/new" [queryParams]="{ from: d.order.id }"><aon-icon name="copy" [size]="17" />{{ i18n.t('drill.duplicate') }}</a>
+            @if (isAdmin()) {
+              <button type="button" class="tool is-danger" (click)="askDelete()"><aon-icon name="trash" [size]="17" />{{ i18n.t('op.delete') }}</button>
+            }
             <button type="button" class="tool is-main" (click)="print()"><aon-icon name="printer" [size]="17" />{{ i18n.t('op.print') }}</button>
           </div>
+          @if (deleting()) {
+            <aon-confirm-delete
+              [heading]="i18n.t('op.deleteTitle', { code: d.order.code ?? d.order.title })"
+              [points]="[i18n.t('op.deleteWhat'), i18n.t('op.deleteOnlyEmpty'), i18n.t('delete.irreversible')]"
+              [confirmLabel]="i18n.t('op.deleteConfirm')"
+              [busy]="deleteBusy()"
+              [error]="deleteError()"
+              (confirmed)="confirmDelete()"
+              (cancelled)="deleting.set(false)"
+            />
+          }
         }
       </nav>
 
@@ -162,10 +179,18 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
               <button type="button" class="meter" [attr.aria-label]="i18n.t('op.goQty')" (click)="go('qty')">
                 <div class="m-top">
                   <span class="m-k">{{ i18n.t('drill.qty') }}</span>
-                  <span class="m-v num">{{ i18n.number(o.doneQty) }}<span class="m-of"> / {{ i18n.number(o.plannedQty) }} {{ unitLabel() }}</span></span>
+                  @if (o.plannedQty > 0) {
+                    <span class="m-v num">{{ i18n.number(o.doneQty) }}<span class="m-of"> / {{ i18n.number(o.plannedQty) }} {{ unitLabel() }}</span></span>
+                  } @else {
+                    <span class="m-v">{{ i18n.t('order.noQuantity') }}</span>
+                  }
                 </div>
-                <span class="bar-t" aria-hidden="true"><span [style.width.%]="qtyRatio() * 100"></span></span>
-                <span class="m-s">{{ i18n.t('op.percent', { n: pct(qtyRatio()) }) }}@if (o.doneQty > o.plannedQty) { · {{ i18n.t('op.overPlan') }}}</span>
+                @if (o.plannedQty > 0) {
+                  <span class="bar-t" aria-hidden="true"><span [style.width.%]="qtyRatio() * 100"></span></span>
+                  <span class="m-s">{{ i18n.t('op.percent', { n: pct(qtyRatio()) }) }}@if (o.doneQty > o.plannedQty) { · {{ i18n.t('op.overPlan') }}}</span>
+                } @else {
+                  <span class="m-s">{{ i18n.t('order.noQuantityDone') }}</span>
+                }
               </button>
               <button type="button" class="meter" [class.is-over]="hoursOver()" [attr.aria-label]="i18n.t('op.goTime')" (click)="go('time')">
                 <div class="m-top">
@@ -402,9 +427,14 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
               <section class="figs">
                 <div class="fig">
                   <p class="fig-k">{{ i18n.t('drill.qty') }}</p>
-                  <p class="fig-v num">{{ i18n.number(o.doneQty) }}<span class="fig-u">/ {{ i18n.number(o.plannedQty) }} {{ unitLabel() }}</span></p>
-                  <span class="pbar" aria-hidden="true"><span [style.width.%]="qtyRatio() * 100"></span></span>
-                  <p class="fig-s">{{ i18n.t('op.percent', { n: pct(qtyRatio()) }) }}</p>
+                  @if (o.plannedQty > 0) {
+                    <p class="fig-v num">{{ i18n.number(o.doneQty) }}<span class="fig-u">/ {{ i18n.number(o.plannedQty) }} {{ unitLabel() }}</span></p>
+                    <span class="pbar" aria-hidden="true"><span [style.width.%]="qtyRatio() * 100"></span></span>
+                    <p class="fig-s">{{ i18n.t('op.percent', { n: pct(qtyRatio()) }) }}</p>
+                  } @else {
+                    <p class="fig-v">{{ i18n.t('order.noQuantity') }}</p>
+                    <p class="fig-s">{{ i18n.t('order.noQuantityDone') }}</p>
+                  }
                 </div>
                 <div class="fig" [class.warn]="hoursOver()">
                   <p class="fig-k">{{ i18n.t('drill.hoursUsed') }}</p>
@@ -684,6 +714,13 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
       border-color: var(--color-gold);
       background: var(--color-gold);
       color: var(--color-charcoal);
+    }
+    .tool.is-danger {
+      color: var(--color-bad-ink);
+    }
+    .tool.is-danger:hover {
+      border-color: var(--color-bad);
+      background: var(--color-bad-tint);
     }
 
     /* Head: the document's identity. The site drawing sits behind it on the right, melted into the paper. */
@@ -1970,6 +2007,15 @@ export class OrderPageComponent {
   private readonly store = inject(ManagerStore);
   private readonly clock = inject(ClockService);
   private readonly document = inject(DOCUMENT);
+  private readonly network = inject(NetworkStatusService);
+  private readonly router = inject(Router);
+  private readonly toast = inject(ToastService);
+
+  /** Only the administrator deletes orders, and only those nobody has worked on yet. */
+  protected readonly isAdmin = this.store.isAdmin;
+  protected readonly deleting = signal(false);
+  protected readonly deleteBusy = signal(false);
+  protected readonly deleteError = signal<string | null>(null);
 
   /** Route param `:id`, bound by withComponentInputBinding. */
   readonly id = input.required<string>();
@@ -2174,6 +2220,40 @@ export class OrderPageComponent {
 
   protected summaryKey(s: string): TranslationKey {
     return `reports.status${s}` as TranslationKey;
+  }
+
+  /** Opens the delete dialog, unless the history already shows recorded work: that order is completed, not deleted. */
+  protected askDelete(): void {
+    const d = this.data();
+    if (!d) return;
+    if (d.timeEntries.length || d.logs.length || d.photos.length) {
+      this.toast.error(this.i18n.t('op.errHasRecords'));
+      return;
+    }
+    this.deleteError.set(null);
+    this.deleting.set(true);
+  }
+
+  protected async confirmDelete(): Promise<void> {
+    const order = this.data()?.order;
+    if (!order || this.deleteBusy()) return;
+    if (!this.network.online()) {
+      this.deleteError.set(this.i18n.t('delete.errOffline'));
+      return;
+    }
+    this.deleteBusy.set(true);
+    this.deleteError.set(null);
+    try {
+      await this.store.deleteOrder(order.id);
+      this.deleting.set(false);
+      this.toast.success(this.i18n.t('op.deleted', { code: order.code ?? order.title }));
+      await this.router.navigateByUrl('/m');
+    } catch (err: unknown) {
+      console.warn('[AON] order delete failed', err);
+      this.deleteError.set(this.i18n.t(err instanceof ApiError && err.kind === 'CONFLICT' ? 'op.errHasRecords' : 'delete.errFailed'));
+    } finally {
+      this.deleteBusy.set(false);
+    }
   }
 
   protected print(): void {

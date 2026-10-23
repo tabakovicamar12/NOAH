@@ -246,7 +246,8 @@ async function upsertOrder(db: MockServerDb, me: MockUser, id: string, body: Wor
   if (!site) throw new MockHttpError(404, 'Object not found');
   if (!QUANTITY_UNITS.includes(body.unit)) throw new MockHttpError(400, 'unit invalid');
   const plannedQty = requireNumber(body.plannedQty, 'plannedQty');
-  if (plannedQty <= 0) throw new MockHttpError(400, 'plannedQty must be positive');
+  // 0 is a task without a quantity; anything else is the plan in the order's unit.
+  if (plannedQty < 0) throw new MockHttpError(400, 'plannedQty must not be negative');
   if (!Array.isArray(body.crewIds)) throw new MockHttpError(400, 'crewIds required');
   const users = await db.users.where('role').equals('WORKER').toArray();
   const crewIds = [...new Set(body.crewIds)];
@@ -424,6 +425,7 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
       const target = await db.orders.get(requireString(body.workOrderId, 'workOrderId'));
       if (!target) throw new MockHttpError(404, 'Work order not found');
       if (body.kind === 'QUANTITY') {
+        if (target.plannedQty === 0) throw new MockHttpError(409, 'NO_QUANTITY');
         const q = requireNumber(body.quantity, 'quantity');
         if (q === 0) throw new MockHttpError(400, 'quantity must not be zero');
         if (q < 0 && !(typeof body.text === 'string' && body.text.trim())) throw new MockHttpError(400, 'A correction needs a reason');
@@ -449,6 +451,21 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
       if (file.size > 8 * 1024 * 1024) throw new MockHttpError(413, 'File too large');
       await db.photos.put({ ...meta, blob: file });
     });
+  }
+
+  // Same rule as the server: own photo, and only while that day's report is open.
+  if (method === 'DELETE' && segments[0] === 'photos' && segments[1] && !segments[2]) {
+    requireRole(me, 'WORKER');
+    const date = url.searchParams.get('date') ?? '';
+    if (!isIsoDate(date)) throw new MockHttpError(400, 'date must be YYYY-MM-DD');
+    const photo = await db.photos.get(segments[1]);
+    if (!photo) throw new MockHttpError(404, 'Photo not found');
+    if (photo.userId !== me.id) throw new MockHttpError(403, 'Not your photo');
+    const summary = await db.summaries.get(`sum-${me.id}-${date}`);
+    if (summary && (summary.status === 'SUBMITTED' || summary.status === 'APPROVED')) throw new MockHttpError(409, 'REPORT_LOCKED');
+    await db.photos.delete(photo.id);
+    lastChangeAt = Date.now();
+    return null;
   }
 
   if (method === 'PUT' && segments[0] === 'daily-summaries' && segments[1]) {
@@ -726,6 +743,42 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
       ...(body.active !== undefined ? { active: body.active } : {}),
     };
     await (table as typeof db.sites).put(next as Site);
+    return null;
+  }
+
+  // Same rule as the server: only what has no recorded work can be deleted; the rest is archived or completed.
+  if (method === 'DELETE' && segments[0] === 'admin' && (segments[1] === 'projects' || segments[1] === 'sites') && segments[2] && !segments[3]) {
+    requireAdmin(me);
+    const isProject = segments[1] === 'projects';
+    const id = segments[2];
+    if (!(await (isProject ? db.projects : db.sites).get(id))) throw new MockHttpError(404, 'Not found');
+    const siteIds = new Set(isProject ? (await db.sites.toArray()).filter((s) => s.projectId === id).map((s) => s.id) : [id]);
+    const [orders, entries] = await Promise.all([db.orders.toArray(), db.timeEntries.toArray()]);
+    if (orders.some((o) => siteIds.has(o.siteId) || (isProject && o.projectId === id)) || entries.some((e) => e.siteId && siteIds.has(e.siteId))) {
+      throw new MockHttpError(409, 'HAS_RECORDS');
+    }
+    await db.sites.bulkDelete([...siteIds]);
+    if (isProject) await db.projects.delete(id);
+    for (const u of await db.users.toArray()) {
+      if (!u.projectIds?.includes(id) && !u.siteIds?.some((s) => siteIds.has(s))) continue;
+      await db.users.put({ ...u, projectIds: (u.projectIds ?? []).filter((p) => p !== id), siteIds: (u.siteIds ?? []).filter((s) => !siteIds.has(s)) });
+    }
+    lastChangeAt = Date.now();
+    return null;
+  }
+
+  if (method === 'DELETE' && segments[0] === 'admin' && segments[1] === 'work-orders' && segments[2] && !segments[3]) {
+    requireAdmin(me);
+    const id = segments[2];
+    if (!(await db.orders.get(id))) throw new MockHttpError(404, 'Work order not found');
+    const [entries, logs, photos] = await Promise.all([
+      db.timeEntries.where('workOrderId').equals(id).count(),
+      db.logs.where('workOrderId').equals(id).count(),
+      db.photos.where('workOrderId').equals(id).count(),
+    ]);
+    if (entries + logs + photos > 0) throw new MockHttpError(409, 'HAS_RECORDS');
+    await db.orders.delete(id);
+    lastChangeAt = Date.now();
     return null;
   }
 

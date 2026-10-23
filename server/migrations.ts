@@ -286,6 +286,14 @@ alter table change_marker enable row level security;
 alter table sites add column if not exists house_model text;
 `,
   },
+  {
+    id: '011_orders_without_quantity',
+    // A plan of 0 marks a task that is not measured in a quantity (an inspection, a handover, a cleanup).
+    sql: `
+alter table work_orders drop constraint if exists work_orders_planned_qty_check;
+alter table work_orders add constraint work_orders_planned_qty_check check (planned_qty >= 0);
+`,
+  },
 ];
 
 export async function migrate(db: Db, log: (msg: string) => void = () => undefined): Promise<string[]> {

@@ -4,16 +4,17 @@ import type { LocalAuthoredOrder } from '../../../core/db/aon-db';
 import { DatabaseService } from '../../../core/db/database.service';
 import { liveSignal } from '../../../core/db/live';
 import { ApiClient } from '../../../core/http/api-client.service';
-import type {
-  ManagerDirectoryResponse,
-  ManagerOverviewResponse,
-  ManagerProjectsResponse,
-  ProjectCreate,
-  SiteCreate,
-  SummaryDetailResponse,
-  SummaryReviewRequest,
-  WorkOrderDetailResponse,
-  WorkOrderUpsert,
+import {
+  ApiError,
+  type ManagerDirectoryResponse,
+  type ManagerOverviewResponse,
+  type ManagerProjectsResponse,
+  type ProjectCreate,
+  type SiteCreate,
+  type SummaryDetailResponse,
+  type SummaryReviewRequest,
+  type WorkOrderDetailResponse,
+  type WorkOrderUpsert,
 } from '../../../core/models/api.models';
 import { canApproveReports, isAdmin, type IsoDate, type Project, type Site } from '../../../core/models/domain.models';
 import { NetworkStatusService } from '../../../core/network/network-status.service';
@@ -189,6 +190,19 @@ export class ManagerStore {
     const site = await this.api.createSite(body);
     void this.loadDirectory();
     return site;
+  }
+
+  /**
+   * Deletes an order nobody has worked on (the server refuses others with 409 HAS_RECORDS). Needs the
+   * network, like a review. An order already gone counts as deleted.
+   */
+  async deleteOrder(orderId: string): Promise<void> {
+    try {
+      await this.api.deleteWorkOrder(orderId);
+    } catch (err: unknown) {
+      if (!(err instanceof ApiError && err.kind === 'NOT_FOUND')) throw err;
+    }
+    void this.load();
   }
 
   detail(orderId: string): Promise<WorkOrderDetailResponse> {

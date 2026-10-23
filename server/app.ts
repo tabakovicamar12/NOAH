@@ -512,12 +512,14 @@ export function createApp(config: ServerConfig): Hono<Env> {
     return idempotent(c, async (db) => {
       if (body.userId !== me.id) throw new HttpError(403, 'Not your entry');
       const orderId = requireId(body.workOrderId, 'workOrderId');
-      if (!(await db.query(`select 1 from work_orders where id = $1`, [orderId])).length) throw new HttpError(404, 'Work order not found');
+      const order = (await db.query(`select planned_qty from work_orders where id = $1`, [orderId]))[0];
+      if (!order) throw new HttpError(404, 'Work order not found');
       if (!(await inCrew(db, orderId, me.id))) throw new HttpError(403, 'Not in this crew');
       if (!['QUANTITY', 'NOTE', 'ISSUE'].includes(body.kind)) throw new HttpError(400, 'kind invalid');
       let quantity: number | null = null;
       let text: string | null = null;
       if (body.kind === 'QUANTITY') {
+        if (Number(order['planned_qty']) === 0) throw new HttpError(409, 'NO_QUANTITY');
         quantity = requireNumber(body.quantity, 'quantity');
         if (quantity === 0 || Math.abs(quantity) > 100_000) throw new HttpError(400, 'quantity out of range');
         // A correction (negative) keeps the mistaken entry and says why; nothing is ever erased.
@@ -582,6 +584,32 @@ export function createApp(config: ServerConfig): Hono<Env> {
         ],
       );
     });
+  });
+
+  // A worker takes back their own photo while that day's report is still open; once submitted, the photo is
+  // part of what the manager signs. `date` is the device's day of the photo (the server may run in UTC).
+  api.delete('/photos/:id', workerOnly, async (c) => {
+    const id = requireId(c.req.param('id'), 'id');
+    const date = requireDate(c.req.query('date'), 'date');
+    const me = c.get('me');
+    let key = '';
+    await c.get('db').tx(async (db) => {
+      const row = (await db.query(`select * from photos where id = $1 for update`, [id]))[0];
+      if (!row) throw new HttpError(404, 'Photo not found');
+      if (String(row['user_id']) !== me.id) throw new HttpError(403, 'Not your photo');
+      // The device's day must be the photo's day in some time zone (UTC−12 … UTC+14).
+      const midnight = Date.parse(`${date}T00:00:00Z`);
+      const at = Number(row['created_at']);
+      if (at < midnight - 14 * 3_600_000 || at >= midnight + 36 * 3_600_000) throw new HttpError(400, 'date does not match the photo');
+      const closed = await db.query(`select 1 from daily_summaries where user_id = $1 and date = $2 and status in ('SUBMITTED', 'APPROVED')`, [me.id, date]);
+      if (closed.length) throw new HttpError(409, 'REPORT_LOCKED');
+      key = String(row['storage_key'] ?? '');
+      await db.query(`delete from photos where id = $1`, [id]);
+      await markChanged(db);
+    });
+    // The record is gone first; a leftover file without a record is never shown and can be swept later.
+    if (key) await photos.remove([key]).catch((err: unknown) => console.error('[AON api] photo file delete failed', err));
+    return c.body(null, 204);
   });
 
   api.put('/daily-summaries/:id', workerOnly, async (c) => {
@@ -947,6 +975,58 @@ export function createApp(config: ServerConfig): Hono<Env> {
     return c.body(null, 204);
   });
 
+  // Deleting is for mistakes only: anything with recorded work stays, since working time is a legal record
+  // (ZEPDSV). Such a project, object or order is archived or completed instead; the client says so on HAS_RECORDS.
+  api.delete('/admin/projects/:id', adminOnly, async (c) => {
+    const id = requireId(c.req.param('id'), 'id');
+    await c.get('db').tx(async (db) => {
+      if (!(await db.query(`select 1 from projects where id = $1 for update`, [id])).length) throw new HttpError(404, 'Project not found');
+      const used = await db.query(
+        `select 1 from work_orders where project_id = $1
+         union all select 1 from time_entries t join sites s on s.id = t.site_id where s.project_id = $1 limit 1`,
+        [id],
+      );
+      if (used.length > 0) throw new HttpError(409, 'HAS_RECORDS');
+      await db.query(`delete from site_foremen where site_id in (select id from sites where project_id = $1)`, [id]);
+      await db.query(`delete from sites where project_id = $1`, [id]);
+      await db.query(`delete from project_managers where project_id = $1`, [id]);
+      await db.query(`delete from projects where id = $1`, [id]);
+      await markChanged(db);
+    });
+    return c.body(null, 204);
+  });
+
+  api.delete('/admin/sites/:id', adminOnly, async (c) => {
+    const id = requireId(c.req.param('id'), 'id');
+    await c.get('db').tx(async (db) => {
+      if (!(await db.query(`select 1 from sites where id = $1 for update`, [id])).length) throw new HttpError(404, 'Object not found');
+      const used = await db.query(`select 1 from work_orders where site_id = $1 union all select 1 from time_entries where site_id = $1 limit 1`, [id]);
+      if (used.length > 0) throw new HttpError(409, 'HAS_RECORDS');
+      await db.query(`delete from site_foremen where site_id = $1`, [id]);
+      await db.query(`delete from sites where id = $1`, [id]);
+      await markChanged(db);
+    });
+    return c.body(null, 204);
+  });
+
+  api.delete('/admin/work-orders/:id', adminOnly, async (c) => {
+    const id = requireId(c.req.param('id'), 'id');
+    await c.get('db').tx(async (db) => {
+      if (!(await db.query(`select 1 from work_orders where id = $1 for update`, [id])).length) throw new HttpError(404, 'Work order not found');
+      const used = await db.query(
+        `select 1 from time_entries where work_order_id = $1
+         union all select 1 from logs where work_order_id = $1
+         union all select 1 from photos where work_order_id = $1 limit 1`,
+        [id],
+      );
+      if (used.length > 0) throw new HttpError(409, 'HAS_RECORDS');
+      // The crew rows go with the order (on delete cascade).
+      await db.query(`delete from work_orders where id = $1`, [id]);
+      await markChanged(db);
+    });
+    return c.body(null, 204);
+  });
+
   api.put('/admin/projects/:id/managers', adminOnly, async (c) => {
     const body = await jsonBody<AssignmentUpdate>(c);
     const id = requireId(c.req.param('id'), 'id');
@@ -989,7 +1069,8 @@ async function upsertOrder(db: Db, me: UserRow, id: string, body: WorkOrderUpser
   if (existing && !siteInScope(scope, String(existing['site_id']))) throw new HttpError(403, 'OUT_OF_SCOPE');
   if (!QUANTITY_UNITS.includes(body.unit)) throw new HttpError(400, 'unit invalid');
   const plannedQty = requireNumber(body.plannedQty, 'plannedQty');
-  if (plannedQty <= 0) throw new HttpError(400, 'plannedQty must be positive');
+  // 0 is a task without a quantity; anything else is the plan in the order's unit.
+  if (plannedQty < 0) throw new HttpError(400, 'plannedQty must not be negative');
   if (!Array.isArray(body.crewIds)) throw new HttpError(400, 'crewIds required');
   const crewIds = [...new Set(body.crewIds.filter(isId))];
   // Newcomers must be active workers; someone already on the crew stays valid after leaving, so the order

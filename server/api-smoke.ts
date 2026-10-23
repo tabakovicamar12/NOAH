@@ -84,11 +84,16 @@ async function main(): Promise<void> {
   check('kg and kpl units are accepted', o2.status === 204 && o3.status === 204);
   const bad = await newOrder('BOX', 1, 'X');
   check('an unknown unit is rejected', bad.status === 400);
+  const task = await newOrder('PCS', 0, 'Pregled objekta');
+  check('an order without a quantity is accepted', task.status === 204 && !!task.code, `${task.status}`);
+  check('a negative plan is rejected', (await newOrder('PCS', -1, 'X')).status === 400);
 
   // Quantities and corrections
   const log = (orderId: string, quantity: number, text: string | null): Promise<{ status: number }> =>
     call('POST', '/logs', worker, { id: crypto.randomUUID(), userId: 'u-w', workOrderId: orderId, kind: 'QUANTITY', quantity, text, createdAt: Date.now() });
   check('a quantity can be logged', (await log(o1.id, 5, null)).status === 204);
+  const noQty = await log(task.id, 1, null);
+  check('an order without a quantity refuses quantities', noQty.status === 409, String(noQty.status));
   check('a correction without a reason is rejected', (await log(o1.id, -4, null)).status === 400);
   check('a correction with a reason is accepted', (await log(o1.id, -4, 'Pomotoma +5 namesto +1')).status === 204);
   check('a correction below zero is rejected', (await log(o1.id, -5, 'preveč')).status === 409);
@@ -188,12 +193,47 @@ async function main(): Promise<void> {
   const detail = await call('GET', `/manager/work-orders/${o1.id}`, admin);
   check('the photo and its Slovenian caption arrive intact', (detail.body?.photos ?? []).some((ph: { id: string; caption: string }) => ph.id === rawId && ph.caption === 'Stena č. 6 – šivi'));
 
+  // A worker takes back their own photo while the day's report is open
+  const now0 = new Date();
+  const todayIso = `${now0.getFullYear()}-${String(now0.getMonth() + 1).padStart(2, '0')}-${String(now0.getDate()).padStart(2, '0')}`;
+  check('the desk cannot use the worker photo delete', (await call('DELETE', `/photos/${rawId}?date=${todayIso}`, admin)).status === 403);
+  check('a wrong day is refused', (await call('DELETE', `/photos/${rawId}?date=2001-01-01`, worker)).status === 400);
+  check('a worker deletes their own photo', (await call('DELETE', `/photos/${rawId}?date=${todayIso}`, worker)).status === 204);
+  const afterPhoto = await call('GET', `/manager/work-orders/${o1.id}`, admin);
+  check('the deleted photo is gone for the manager', !(afterPhoto.body?.photos ?? []).some((ph: { id: string }) => ph.id === rawId));
+  const lockedId = crypto.randomUUID();
+  await app.request('/api/v1/photos', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${worker}`, 'Idempotency-Key': crypto.randomUUID(), 'Content-Type': 'image/jpeg',
+      'X-Photo-Meta': Buffer.from(JSON.stringify({ ...photoMeta(lockedId), createdAt: at(9) })).toString('base64url'),
+    },
+    body: jpeg,
+  });
+  const lockedDel = await call('DELETE', `/photos/${lockedId}?date=${day}`, worker);
+  check('a photo of a submitted day is kept', lockedDel.status === 409 && lockedDel.body?.message === 'REPORT_LOCKED', `${lockedDel.status} ${lockedDel.body?.message}`);
+
   // The desk's cheap "anything new?" moves with every recorded entry
   const before = (await call('GET', '/manager/changes', admin)).body?.changedAt ?? 0;
   await log(o2.id, 1, null);
   const after2 = (await call('GET', '/manager/changes', admin)).body?.changedAt ?? 0;
   check('a worker entry moves the change marker', after2 > before, `${before} -> ${after2}`);
   check('workers cannot read the change marker', (await call('GET', '/manager/changes', worker)).status === 403);
+
+  // Deleting: only the administrator, and only what holds no recorded work
+  const spare = await newOrder('PCS', 1, 'Pomotoma ustvarjen');
+  check('a worker cannot delete an order', (await call('DELETE', `/admin/work-orders/${spare.id}`, worker)).status === 403);
+  check('an untouched order can be deleted', (await call('DELETE', `/admin/work-orders/${spare.id}`, admin)).status === 204);
+  check('the deleted order is gone', (await call('GET', `/manager/work-orders/${spare.id}`, admin)).status === 404);
+  check('the worker no longer gets it', !(await call('GET', '/worker/orders', worker)).body?.orders?.some((o: { id: string }) => o.id === spare.id));
+  const kept = await call('DELETE', `/admin/work-orders/${o1.id}`, admin);
+  check('an order with recorded work is kept', kept.status === 409 && kept.body?.message === 'HAS_RECORDS', `${kept.status} ${kept.body?.message}`);
+  check('an object with orders is kept', (await call('DELETE', `/admin/sites/${s1.body.id}`, admin)).status === 409);
+  check('a project with orders is kept', (await call('DELETE', `/admin/projects/${p1.body.id}`, admin)).status === 409);
+  check('an empty object can be deleted', (await call('DELETE', `/admin/sites/${s2.body.id}`, admin)).status === 204);
+  check('an empty project can be deleted with its objects', (await call('DELETE', `/admin/projects/${p2.body.id}`, admin)).status === 204);
+  const left = JSON.stringify((await call('GET', '/manager/projects', admin)).body);
+  check('deleted projects and objects leave the list', !left.includes(p2.body.id) && !left.includes(s2.body.id) && left.includes(s1.body.id));
 
   const org = await call('GET', '/org', null);
   check('employer details are public', org.status === 200 && 'name' in (org.body ?? {}));

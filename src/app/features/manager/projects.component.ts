@@ -10,6 +10,7 @@ import { ToastService } from '../../core/ui/toast.service';
 import type { CrewMember, QuantityUnit, Site, WorkOrderStatus } from '../../core/models/domain.models';
 import { HOUSE_CATALOG, HOUSE_CATEGORIES, houseModel, type HouseCategory, type HouseModel } from '../../core/models/house-catalog';
 import { minutesToHours } from '../../core/util/util';
+import { ConfirmDeleteComponent } from '../../shared/ui/confirm-delete.component';
 import { crewLabel } from '../../shared/ui/format';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { StatusTagComponent } from '../../shared/ui/status-tag.component';
@@ -63,11 +64,23 @@ function dueSoon(o: ProjectOrderRow): boolean {
  */
 @Component({
   selector: 'aon-manager-projects',
-  imports: [RouterLink, NgTemplateOutlet, IconComponent, StatusTagComponent],
+  imports: [RouterLink, NgTemplateOutlet, ConfirmDeleteComponent, IconComponent, StatusTagComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="px-4 pb-12 pt-5 sm:px-6 lg:px-8 lg:pt-7">
       <ng-container *ngTemplateOutlet="topNew" />
+      @if (deleting(); as d) {
+        <aon-confirm-delete
+          [heading]="i18n.t(d.kind === 'PROJECT' ? 'projects.deleteProjectTitle' : 'projects.deleteSiteTitle', { name: d.name })"
+          [points]="[i18n.t(d.kind === 'PROJECT' ? 'projects.deleteProjectWhat' : 'projects.deleteSiteWhat'), i18n.t('projects.deleteOnlyEmpty'), i18n.t('delete.irreversible')]"
+          [confirmLabel]="i18n.t(d.kind === 'PROJECT' ? 'projects.deleteProject' : 'projects.deleteSite')"
+          [typeToConfirm]="d.kind === 'PROJECT' ? d.code : null"
+          [busy]="saving()"
+          [error]="deleteError()"
+          (confirmed)="confirmDelete()"
+          (cancelled)="deleting.set(null)"
+        />
+      }
       @if (state().kind === 'READY') {
         <!-- Deadlines on one axis: each open order is a dot on the day it is due. -->
         <section class="pw3" aria-labelledby="pw3-title">
@@ -189,6 +202,15 @@ function dueSoon(o: ProjectOrderRow): boolean {
               <button type="button" class="pv-quiet" (click)="openEdit('PROJECT', p.summary.project.id, p.summary.project.name, '', p.summary.managers)">
                 <aon-icon name="pencil" [size]="15" />{{ i18n.t('projects.editProject') }}
               </button>
+              <button
+                type="button"
+                class="pv-quiet pv-del"
+                [attr.aria-label]="i18n.t('projects.deleteProjectTitle', { name: p.summary.project.name })"
+                [title]="i18n.t('projects.deleteProject')"
+                (click)="askDelete('PROJECT', p.summary.project.id)"
+              >
+                <aon-icon name="trash" [size]="15" />
+              </button>
             }
             <a class="pv-link" routerLink="/m" [queryParams]="{ project: p.summary.project.id }">{{ i18n.t('projects.allOrders', { n: p.total }) }}<aon-icon name="arrow-right" [size]="16" /></a>
           </div>
@@ -216,6 +238,15 @@ function dueSoon(o: ProjectOrderRow): boolean {
                 @if (canManage() && editing()?.id !== s.site.id) {
                   <button type="button" class="pv-quiet" (click)="openEdit('SITE', s.site.id, s.site.name, s.site.city, foremenOf(p, s.site.id), s.site.houseModel ?? null)">
                     <aon-icon name="pencil" [size]="15" />{{ i18n.t('projects.editSite') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="pv-quiet pv-del"
+                    [attr.aria-label]="i18n.t('projects.deleteSiteTitle', { name: s.site.name })"
+                    [title]="i18n.t('projects.deleteSite')"
+                    (click)="askDelete('SITE', s.site.id)"
+                  >
+                    <aon-icon name="trash" [size]="15" />
                   </button>
                 }
                 <a class="pv-quiet" routerLink="/m/orders/new" [queryParams]="{ site: s.site.id }"><aon-icon name="plus" [size]="15" [stroke]="2.25" />{{ i18n.t('projects.newOrder') }}</a>
@@ -330,6 +361,9 @@ function dueSoon(o: ProjectOrderRow): boolean {
               <button type="button" class="as-archive" [disabled]="saving()" (click)="archive()">
                 <aon-icon name="archive" [size]="15" />{{ i18n.t(confirmArchive() ? 'projects.archiveConfirm' : e.kind === 'PROJECT' ? 'projects.archiveProject' : 'projects.archiveSite') }}
               </button>
+              <button type="button" class="as-archive" [disabled]="saving()" (click)="askDelete(e.kind, e.id)">
+                <aon-icon name="trash" [size]="15" />{{ i18n.t(e.kind === 'PROJECT' ? 'projects.deleteProject' : 'projects.deleteSite') }}
+              </button>
             </div>
             @if (confirmArchive()) {
               <p class="as-hint">{{ i18n.t('projects.archiveHint') }}</p>
@@ -401,7 +435,13 @@ function dueSoon(o: ProjectOrderRow): boolean {
             }
           </span>
           <span class="pv-order-crew" [class.pv-muted]="!o.crewNames.length" [title]="o.crewNames.join(', ')">{{ crew(o.crewNames) }}</span>
-          <span class="pv-order-qty">{{ i18n.number(o.doneQty) }}/{{ i18n.number(o.plannedQty) }} {{ i18n.t(unitKey(o.unit)) }}</span>
+          <span class="pv-order-qty">
+            @if (o.plannedQty > 0) {
+              {{ i18n.number(o.doneQty) }}/{{ i18n.number(o.plannedQty) }} {{ i18n.t(unitKey(o.unit)) }}
+            } @else {
+              {{ i18n.t('order.noQuantity') }}
+            }
+          </span>
           <span class="pv-order-status">
             @if (o.published) {
               <aon-status-tag [status]="o.status" size="sm" />
@@ -1195,6 +1235,15 @@ function dueSoon(o: ProjectOrderRow): boolean {
       background: var(--color-field);
       color: var(--color-text);
     }
+    .pv-del {
+      min-width: 2.25rem;
+      justify-content: center;
+    }
+    .pv-del:hover,
+    .pv-del:focus-visible {
+      background: var(--color-bad-tint);
+      color: var(--color-bad-ink);
+    }
     .pv-add {
       margin-top: 0.5rem;
     }
@@ -1323,6 +1372,9 @@ export class ProjectsComponent implements OnInit {
   protected readonly editModel = signal('');
   protected readonly picked = signal<ReadonlySet<string>>(new Set());
   protected readonly confirmArchive = signal(false);
+  /** The project or object in the delete dialog. */
+  protected readonly deleting = signal<{ readonly kind: 'PROJECT' | 'SITE'; readonly id: string; readonly name: string; readonly code: string } | null>(null);
+  protected readonly deleteError = signal<string | null>(null);
   private readonly accounts = signal<readonly AdminUser[] | null>(null);
   /** Who can be chosen: active managers for a project, active foremen for an object. */
   protected readonly candidates = computed(() => {
@@ -1553,6 +1605,56 @@ export class ProjectsComponent implements OnInit {
       this.toast.success(this.i18n.t('projects.archived'));
       this.closeEdit();
     }, 'projects.errArchiveOpen');
+  }
+
+  /**
+   * Opens the delete dialog for a project or object. When this list already shows work orders on it, it says
+   * so at once instead: such records are kept, and archiving is the way out.
+   */
+  protected askDelete(kind: 'PROJECT' | 'SITE', id: string): void {
+    const e = { kind, id };
+    const projects = this.ready()?.data.projects ?? [];
+    const summary = e.kind === 'PROJECT' ? projects.find((p) => p.project.id === e.id) : projects.find((p) => p.sites.some((s) => s.id === e.id));
+    const target = e.kind === 'PROJECT' ? summary?.project : summary?.sites.find((s) => s.id === e.id);
+    if (!summary || !target) return;
+    const used = summary.orders.some((o) => e.kind === 'PROJECT' || o.siteId === e.id);
+    this.confirmArchive.set(false);
+    if (used) {
+      this.toast.error(this.i18n.t('projects.errHasRecords'));
+      return;
+    }
+    this.deleteError.set(null);
+    this.deleting.set({ kind: e.kind, id: e.id, name: target.name, code: target.code });
+  }
+
+  protected async confirmDelete(): Promise<void> {
+    const d = this.deleting();
+    if (!d || this.saving()) return;
+    if (!this.network.online()) {
+      this.deleteError.set(this.i18n.t('delete.errOffline'));
+      return;
+    }
+    this.saving.set(true);
+    this.deleteError.set(null);
+    try {
+      try {
+        if (d.kind === 'PROJECT') await this.api.deleteProject(d.id);
+        else await this.api.deleteSite(d.id);
+      } catch (err: unknown) {
+        // Already gone (deleted elsewhere): the outcome the administrator wanted.
+        if (!(err instanceof ApiError && err.kind === 'NOT_FOUND')) throw err;
+      }
+      this.deleting.set(null);
+      this.closeEdit();
+      this.toast.success(this.i18n.t('projects.deleted'));
+      void this.store.loadDirectory();
+      await this.load();
+    } catch (err: unknown) {
+      console.warn('[AON] delete failed', err);
+      this.deleteError.set(this.i18n.t(err instanceof ApiError && err.kind === 'CONFLICT' ? 'projects.errHasRecords' : 'delete.errFailed'));
+    } finally {
+      this.saving.set(false);
+    }
   }
 
   protected openForm(target: string): void {

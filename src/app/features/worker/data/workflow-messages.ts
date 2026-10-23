@@ -14,6 +14,7 @@ const MESSAGES: Readonly<Record<WorkflowError['code'], TranslationKey>> = {
   REPORT_LOCKED: 'day.locked',
   DAY_CLOSED: 'day.closedBlock',
   NO_SITE: 'site.required',
+  OFFLINE: 'photo.deleteOffline',
   STORAGE_FULL: 'photo.storageFull',
 };
 

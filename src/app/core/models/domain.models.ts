@@ -95,6 +95,7 @@ export interface WorkOrder {
   /** Drafts are invisible to workers; assigning publishes the order. */
   readonly published: boolean;
   readonly unit: QuantityUnit;
+  /** 0 for a task without a quantity (an inspection, a handover): only time, notes, photos and the status count. */
   readonly plannedQty: number;
   readonly doneQty: number;
   readonly estimatedMinutes: number | null;
@@ -102,6 +103,11 @@ export interface WorkOrder {
   readonly date: IsoDate | null;
   readonly dueDate: IsoDate | null;
   readonly updatedAt: EpochMs;
+}
+
+/** Whether progress on this order is measured in a quantity; tasks without one are done when completed. */
+export function hasQuantity(order: { readonly plannedQty: number }): boolean {
+  return order.plannedQty > 0;
 }
 
 export type TimeEntryKind = 'SHIFT' | 'ORDER';

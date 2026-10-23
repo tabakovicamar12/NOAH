@@ -94,8 +94,12 @@ type DrillState = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { 
               </div>
               <div class="fact">
                 <dt>{{ i18n.t('drill.qty') }}</dt>
-                <dd class="num">{{ i18n.number(d.order.doneQty) }} / {{ i18n.number(d.order.plannedQty) }} {{ i18n.t(unitKey()) }}</dd>
-                <div class="bar" aria-hidden="true"><span [style.width.%]="qtyRatio() * 100"></span></div>
+                @if (d.order.plannedQty > 0) {
+                  <dd class="num">{{ i18n.number(d.order.doneQty) }} / {{ i18n.number(d.order.plannedQty) }} {{ i18n.t(unitKey()) }}</dd>
+                  <div class="bar" aria-hidden="true"><span [style.width.%]="qtyRatio() * 100"></span></div>
+                } @else {
+                  <dd>{{ i18n.t('order.noQuantity') }}</dd>
+                }
               </div>
               <div class="fact">
                 <dt>{{ i18n.t('drill.hoursUsed') }}</dt>

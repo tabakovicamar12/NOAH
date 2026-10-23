@@ -185,8 +185,12 @@ const R = WORKTIME_RULES;
                         <td><span class="st" [attr.data-s]="r.order.status">{{ i18n.t(statusKey(r.order.status)) }}</span></td>
                         <td class="r num">{{ r.minutesToday ? hm(r.minutesToday) : '–' }}</td>
                         <td class="r num nowrap">
-                          {{ i18n.number(r.order.doneQty) }} / {{ i18n.number(r.order.plannedQty) }} {{ i18n.t(unitKey(r.order.unit)) }}
-                          <span class="pbar" aria-hidden="true"><span [style.width.%]="progress(r.order)"></span></span>
+                          @if (r.order.plannedQty > 0) {
+                            {{ i18n.number(r.order.doneQty) }} / {{ i18n.number(r.order.plannedQty) }} {{ i18n.t(unitKey(r.order.unit)) }}
+                            <span class="pbar" aria-hidden="true"><span [style.width.%]="progress(r.order)"></span></span>
+                          } @else {
+                            {{ i18n.t('order.noQuantity') }}
+                          }
                         </td>
                       </tr>
                     }

@@ -3,7 +3,7 @@ import { Router, RouterLink } from '@angular/router';
 import { SessionStore } from '../../core/auth/session.store';
 import { I18nService } from '../../core/i18n/i18n.service';
 import type { TranslationKey } from '../../core/i18n/sl';
-import { QUANTITY_UNITS, type IsoDate, type Material, type QuantityUnit, type WorkOrder, type WorkOrderStatus } from '../../core/models/domain.models';
+import { QUANTITY_UNITS, hasQuantity, type IsoDate, type Material, type QuantityUnit, type WorkOrder, type WorkOrderStatus } from '../../core/models/domain.models';
 import { NetworkStatusService } from '../../core/network/network-status.service';
 import { ToastService } from '../../core/ui/toast.service';
 import { isIsoDate, toIsoDate, uuid } from '../../core/util/util';
@@ -253,7 +253,19 @@ interface MaterialRow {
                 }
               </label>
             </div>
-            <div class="grid gap-4 sm:grid-cols-[1fr_9rem_1fr]">
+            <div>
+              <span class="label-caps text-ink-muted" id="measure-label">{{ i18n.t('form.measure') }}</span>
+              <div class="seg mt-1" role="radiogroup" aria-labelledby="measure-label">
+                <button type="button" role="radio" [attr.aria-checked]="measured()" [disabled]="siteLocked()" (click)="measured.set(true)">
+                  <b>{{ i18n.t('form.measureQty') }}</b><small>{{ i18n.t('form.measureQtyHint') }}</small>
+                </button>
+                <button type="button" role="radio" [attr.aria-checked]="!measured()" [disabled]="siteLocked()" (click)="measured.set(false)">
+                  <b>{{ i18n.t('form.measureNone') }}</b><small>{{ i18n.t('form.measureNoneHint') }}</small>
+                </button>
+              </div>
+            </div>
+            <div class="grid gap-4" [class]="measured() ? 'sm:grid-cols-[1fr_9rem_1fr]' : 'sm:grid-cols-2'">
+              @if (measured()) {
               <label class="block">
                 <span class="label-caps text-ink-muted">{{ i18n.t('form.plannedQty') }}</span>
                 <input
@@ -280,6 +292,7 @@ interface MaterialRow {
                   }
                 </select>
               </label>
+              }
               <label class="block">
                 <span class="label-caps text-ink-muted">{{ i18n.t('form.estimate') }}</span>
                 <input
@@ -396,6 +409,35 @@ interface MaterialRow {
       outline: 2px solid var(--color-hold);
       outline-offset: 4px;
     }
+    /* How the order is measured: two cards, one chosen. */
+    .seg {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+    }
+    .seg button {
+      display: grid;
+      gap: 0.1rem;
+      padding: 0.6rem 0.85rem;
+      border: 1px solid var(--color-line-strong);
+      border-radius: 0.5rem;
+      background: #fff;
+      text-align: left;
+    }
+    .seg button[aria-checked='true'] {
+      border-color: var(--color-gold);
+      background: var(--color-gold-fill);
+      box-shadow: inset 0 0 0 1px var(--color-gold);
+    }
+    .seg button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .seg small {
+      color: var(--color-text-muted);
+      font-size: 0.85rem;
+      line-height: 1.3;
+    }
     .err {
       display: block;
       margin-top: 0.3rem;
@@ -433,6 +475,8 @@ export class OrderFormComponent {
   protected readonly date = signal<string>(toIsoDate());
   protected readonly dueDate = signal<string>('');
   protected readonly plannedQty = signal<string>('');
+  /** False for a task without a quantity (an inspection, a handover): saved with a plan of 0. */
+  protected readonly measured = signal(true);
   protected readonly unit = signal<QuantityUnit>('PCS');
   protected readonly estimateHours = signal<string>('');
   protected readonly materials = signal<readonly MaterialRow[]>([]);
@@ -478,7 +522,7 @@ export class OrderFormComponent {
     if (!this.siteId()) out.push('site');
     if (!this.title().trim()) out.push('title');
     const q = parseNumber(this.plannedQty());
-    if (q === null || q <= 0) out.push('plannedQty');
+    if (this.measured() && (q === null || q <= 0)) out.push('plannedQty');
     const est = this.estimateHours().trim();
     if (est !== '' && (parseNumber(est) === null || (parseNumber(est) ?? 0) < 0)) out.push('estimate');
     if (this.dueDate() && this.date() && this.dueDate() < this.date()) out.push('due');
@@ -500,7 +544,7 @@ export class OrderFormComponent {
       code: this.mode() === 'edit' ? (this.source()?.code ?? null) : null,
       status,
       where: [this.location().trim(), site ? `${site.projectName} · ${site.name}` : this.i18n.t('form.sitePlaceholder')].filter(Boolean).join(' · '),
-      plan: `0 / ${q !== null && q > 0 ? this.i18n.number(q) : '–'} ${this.i18n.t(this.unitKey(this.unit()))}`,
+      plan: this.measured() ? `0 / ${q !== null && q > 0 ? this.i18n.number(q) : '–'} ${this.i18n.t(this.unitKey(this.unit()))}` : this.i18n.t('order.noQuantity'),
       estimate: est !== null && est > 0 ? hoursLabel(this.i18n, est * 60) : '',
       crewLine: names.length ? names.join(', ') : this.i18n.t('form.noCrew'),
     };
@@ -607,7 +651,7 @@ export class OrderFormComponent {
         crewIds: this.crewIds(),
         published: publish || this.isPublished(),
         unit: this.unit(),
-        plannedQty: parseNumber(this.plannedQty()) ?? 0,
+        plannedQty: this.measured() ? (parseNumber(this.plannedQty()) ?? 0) : 0,
         estimatedMinutes: est !== null && est > 0 ? Math.round(est * 60) : null,
         materials: this.materialsClean(),
         date: isIsoDate(this.date()) ? (this.date() as IsoDate) : null,
@@ -687,7 +731,8 @@ export class OrderFormComponent {
     this.crewIds.set(o.crew.map((c) => c.id));
     this.date.set(duplicate ? toIsoDate() : (o.date ?? ''));
     this.dueDate.set(duplicate ? '' : (o.dueDate ?? ''));
-    this.plannedQty.set(String(o.plannedQty));
+    this.measured.set(hasQuantity(o));
+    this.plannedQty.set(hasQuantity(o) ? String(o.plannedQty) : '');
     this.unit.set(o.unit);
     this.estimateHours.set(o.estimatedMinutes ? String(Math.round((o.estimatedMinutes / 60) * 10) / 10) : '');
     this.materials.set(o.materials.map((m) => ({ key: this.materialKey++, name: m.name, qty: m.qty === null ? '' : String(m.qty), unit: m.unit ?? '' })));

@@ -3,9 +3,12 @@ import { NgTemplateOutlet } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { I18nService } from '../../core/i18n/i18n.service';
 import type { TranslationKey } from '../../core/i18n/sl';
-import type { OrderOverview, WorkerOverview, WorkerPresence } from '../../core/models/api.models';
-import type { DailySummary, DailySummaryStatus, QuantityUnit, WorkOrderStatus } from '../../core/models/domain.models';
+import { ApiError, type OrderOverview, type WorkerOverview, type WorkerPresence } from '../../core/models/api.models';
+import { hasQuantity, type DailySummary, type DailySummaryStatus, type QuantityUnit, type WorkOrderStatus } from '../../core/models/domain.models';
+import { NetworkStatusService } from '../../core/network/network-status.service';
+import { ToastService } from '../../core/ui/toast.service';
 import { compareCodes, formatDuration, isIsoDate, toIsoDate } from '../../core/util/util';
+import { ConfirmDeleteComponent } from '../../shared/ui/confirm-delete.component';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { ReportStatusComponent } from '../../shared/ui/report-status.component';
 import { progressRatio } from '../../shared/ui/tag-style';
@@ -37,7 +40,7 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
  */
 @Component({
   selector: 'aon-manager-overview',
-  imports: [NgTemplateOutlet, RouterLink, IconComponent, ReportStatusComponent, OrderDrillComponent, ReportReviewComponent],
+  imports: [NgTemplateOutlet, RouterLink, ConfirmDeleteComponent, IconComponent, ReportStatusComponent, OrderDrillComponent, ReportReviewComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown)': 'onKey($event)' },
   template: `
@@ -154,6 +157,9 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
                         </button>
                       </th>
                     }
+                    @if (store.isAdmin()) {
+                      <th scope="col" class="c-act"><span class="sr-only">{{ i18n.t('mgr.colActions') }}</span></th>
+                    }
                   </tr>
                 </thead>
                 <tbody>
@@ -199,7 +205,9 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
                         }
                       </td>
                       <td class="c-progress">
-                        @if (row.order.status === 'ISSUE') {
+                        @if (!hasQuantity(row.order)) {
+                          <span class="muted">{{ i18n.t('order.noQuantity') }}</span>
+                        } @else if (row.order.status === 'ISSUE') {
                           <span class="muted" [title]="i18n.number(row.order.doneQty) + '/' + i18n.number(row.order.plannedQty)">—</span>
                         } @else {
                           <span class="prog">
@@ -208,10 +216,25 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
                           </span>
                         }
                       </td>
+                      @if (store.isAdmin()) {
+                        <td class="c-act">
+                          @if (!row.pending) {
+                            <button
+                              type="button"
+                              class="del-btn"
+                              [attr.aria-label]="i18n.t('mgr.deleteOrderAria', { code: row.order.code ?? row.order.title })"
+                              [title]="i18n.t('op.deleteConfirm')"
+                              (click)="$event.stopPropagation(); askDeleteRow(row)"
+                            >
+                              <aon-icon name="trash" [size]="17" />
+                            </button>
+                          }
+                        </td>
+                      }
                     </tr>
                   } @empty {
                     <tr>
-                      <td colspan="6" class="empty">
+                      <td [attr.colspan]="store.isAdmin() ? 7 : 6" class="empty">
                         <p>{{ i18n.t('mgr.noResults') }}</p>
                         <button type="button" class="empty-btn" (click)="clearFilters()">{{ i18n.t('mgr.clearFilters') }}</button>
                       </td>
@@ -220,6 +243,17 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
                 </tbody>
               </table>
             </div>
+            @if (deletingRow(); as dr) {
+              <aon-confirm-delete
+                [heading]="i18n.t('op.deleteTitle', { code: dr.order.code ?? dr.order.title })"
+                [points]="[i18n.t('op.deleteWhat'), i18n.t('op.deleteOnlyEmpty'), i18n.t('delete.irreversible')]"
+                [confirmLabel]="i18n.t('op.deleteConfirm')"
+                [busy]="deleteBusy()"
+                [error]="deleteError()"
+                (confirmed)="confirmDeleteRow()"
+                (cancelled)="deletingRow.set(null)"
+              />
+            }
             @if (pageCount() > 1) {
               <nav class="pager" [attr.aria-label]="i18n.t('mgr.pagerLabel')">
                 <p class="pager-info">{{ i18n.t('mgr.pageOf', { from: pageFrom(), to: pageTo(), n: orderRows().length }) }}</p>
@@ -757,6 +791,27 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
     .c-status {
       width: 12%;
     }
+    .c-act {
+      width: 3.5rem;
+    }
+    .row td.c-act {
+      padding: 0.4rem 0.6rem 0.4rem 0;
+      text-align: right;
+    }
+    .del-btn {
+      display: inline-grid;
+      place-items: center;
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 0.5rem;
+      color: var(--color-text-muted);
+      transition: background-color 150ms var(--ease-out-expo), color 150ms var(--ease-out-expo);
+    }
+    .del-btn:hover,
+    .del-btn:focus-visible {
+      background: var(--color-bad-tint);
+      color: var(--color-bad-ink);
+    }
     .row td {
       height: 4.35rem;
       padding: 0.4rem 1rem;
@@ -1078,6 +1133,11 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
         width: 4.5rem;
         margin-left: auto;
       }
+      .row td.c-act {
+        grid-column: 1 / -1;
+        justify-self: end;
+        margin: -0.25rem -0.4rem -0.4rem 0;
+      }
       .row.is-static td[data-label] > * {
         text-align: right;
       }
@@ -1110,8 +1170,16 @@ export class OverviewComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly searchEl = viewChild<ElementRef<HTMLInputElement>>('search');
+  private readonly network = inject(NetworkStatusService);
+  private readonly toast = inject(ToastService);
+
+  /** The order in the administrator's delete dialog. */
+  protected readonly deletingRow = signal<OrderRow | null>(null);
+  protected readonly deleteBusy = signal(false);
+  protected readonly deleteError = signal<string | null>(null);
 
   protected readonly formatDuration = formatDuration;
+  protected readonly hasQuantity = hasQuantity;
   protected readonly today = toIsoDate();
 
   /** `?order=` opens an order; `?view=workers` shows the team; `?review=next` the next report; `?project=` / `?site=` scope the list. */
@@ -1442,6 +1510,42 @@ export class OverviewComponent implements OnInit {
   }
 
   /** ⌘K / Ctrl+K focuses the search, as the hint in the field promises. */
+  /**
+   * Administrator's row delete. An order the table already shows as worked on (time, quantity, photos or a
+   * status past New) is refused at once; the server checks notes and everything else again.
+   */
+  protected askDeleteRow(row: OrderRow): void {
+    const worked = row.minutesTotal > 0 || row.photoCount > 0 || row.order.doneQty > 0 || row.order.status !== 'NEW';
+    if (worked) {
+      this.toast.error(this.i18n.t('op.errHasRecords'));
+      return;
+    }
+    this.deleteError.set(null);
+    this.deletingRow.set(row);
+  }
+
+  protected async confirmDeleteRow(): Promise<void> {
+    const row = this.deletingRow();
+    if (!row || this.deleteBusy()) return;
+    if (!this.network.online()) {
+      this.deleteError.set(this.i18n.t('delete.errOffline'));
+      return;
+    }
+    this.deleteBusy.set(true);
+    this.deleteError.set(null);
+    try {
+      await this.store.deleteOrder(row.order.id);
+      if (this.panel()?.id === row.order.id) this.panel.set(null);
+      this.deletingRow.set(null);
+      this.toast.success(this.i18n.t('op.deleted', { code: row.order.code ?? row.order.title }));
+    } catch (err: unknown) {
+      console.warn('[AON] order delete failed', err);
+      this.deleteError.set(this.i18n.t(err instanceof ApiError && err.kind === 'CONFLICT' ? 'op.errHasRecords' : 'delete.errFailed'));
+    } finally {
+      this.deleteBusy.set(false);
+    }
+  }
+
   protected onKey(e: KeyboardEvent): void {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
