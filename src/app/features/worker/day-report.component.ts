@@ -194,58 +194,15 @@ function toTimeInput(ms: number): string {
 
                 <div class="mt-3">
                   <p class="w-label">{{ i18n.t('day.materialsUsed') }}</p>
+                  <ul class="w-rows mt-1">
+                    @for (m of materials(line); track $index) {
+                      <li class="w-row"><span>{{ m.name }}</span><span class="font-semibold tabular-nums">{{ m.qty !== null ? i18n.number(m.qty) : '' }} {{ m.unit ?? '' }}</span></li>
+                    } @empty {
+                      <li class="w-muted">{{ i18n.t('common.none') }}</li>
+                    }
+                  </ul>
                   @if (editable()) {
-                    <ul class="mt-1 grid gap-1.5">
-                      @for (m of materials(line); track $index; let i = $index) {
-                        <li class="mat">
-                          <input
-                            type="text"
-                            class="w-field is-flush"
-                            [attr.aria-label]="i18n.t('form.materialName')"
-                            [value]="m.name"
-                            (input)="setMaterial(line, i, { name: $any($event.target).value })"
-                          />
-                          <input
-                            type="number"
-                            inputmode="decimal"
-                            min="0"
-                            step="any"
-                            class="w-field is-flush text-right tabular-nums"
-                            [attr.aria-label]="i18n.t('form.materialQty', { name: m.name })"
-                            [placeholder]="i18n.t('day.qtyPlaceholder')"
-                            [value]="m.qty ?? ''"
-                            (input)="setMaterial(line, i, { qty: parseQty($any($event.target).value) })"
-                          />
-                          <input
-                            type="text"
-                            class="w-field is-flush is-tight text-center"
-                            [attr.aria-label]="i18n.t('form.materialUnit')"
-                            [value]="m.unit ?? ''"
-                            (input)="setMaterial(line, i, { unit: $any($event.target).value || null })"
-                          />
-                          <button
-                            type="button"
-                            class="icon-btn"
-                            [attr.aria-label]="i18n.t('form.removeMaterial', { name: m.name || i18n.t('form.materialName') })"
-                            [title]="i18n.t('common.remove')"
-                            (click)="removeMaterial(line, i)"
-                          >
-                            <aon-icon name="x" [size]="18" />
-                          </button>
-                        </li>
-                      }
-                    </ul>
-                    <button type="button" class="w-btn w-btn-quiet mt-1" (click)="addMaterial(line)">
-                      <aon-icon name="plus" [size]="16" [stroke]="2.25" />{{ i18n.t('form.addMaterial') }}
-                    </button>
-                  } @else {
-                    <ul class="w-rows mt-1">
-                      @for (m of line.materialsUsed; track $index) {
-                        <li class="w-row"><span>{{ m.name }}</span><span class="font-semibold tabular-nums">{{ m.qty !== null ? i18n.number(m.qty) : '' }} {{ m.unit ?? '' }}</span></li>
-                      } @empty {
-                        <li class="w-muted">{{ i18n.t('common.none') }}</li>
-                      }
-                    </ul>
+                    <p class="w-small w-muted mt-1">{{ i18n.t('mat.reportHint') }}</p>
                   }
                 </div>
               </article>
@@ -466,32 +423,11 @@ export class DayReportComponent {
   }
 
   protected materials(line: ReportOrderLine): readonly Material[] {
-    return this.draft().materials[line.workOrderId] ?? line.materialsUsed;
-  }
-
-  protected parseQty(raw: string): number | null {
-    const n = Number(String(raw).replace(',', '.'));
-    return raw === '' || !Number.isFinite(n) || n < 0 ? null : n;
+    return line.materialsUsed.length ? line.materialsUsed : (this.draft().materials[line.workOrderId] ?? []);
   }
 
   protected setWorkDone(orderId: string, text: string): void {
     this.patch({ workDone: { ...this.draft().workDone, [orderId]: text } });
-  }
-
-  protected setMaterial(line: ReportOrderLine, index: number, change: Partial<Material>): void {
-    const list = this.materials(line).map((m, i) => (i === index ? { ...m, ...change } : m));
-    this.patch({ materials: { ...this.draft().materials, [line.workOrderId]: list } });
-  }
-
-  protected addMaterial(line: ReportOrderLine): void {
-    const list = [...this.materials(line), { name: '', qty: null, unit: null }];
-    this.patch({ materials: { ...this.draft().materials, [line.workOrderId]: list } });
-  }
-
-  /** A draft row, so no confirmation: it is one tap to add back. Planned materials the crew did not use go too. */
-  protected removeMaterial(line: ReportOrderLine, index: number): void {
-    const list = this.materials(line).filter((_, i) => i !== index);
-    this.patch({ materials: { ...this.draft().materials, [line.workOrderId]: list } });
   }
 
   protected openCorrection(): void {

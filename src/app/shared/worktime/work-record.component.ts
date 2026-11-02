@@ -650,6 +650,19 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
         gap: 0.5rem;
       }
     }
+    @media screen and (max-width: 1100px) {
+      .days th:first-child,
+      .days .dt {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        padding-right: 0.5rem;
+        background: #fff;
+      }
+      .d.we .dt {
+        background: var(--soft);
+      }
+    }
     @media print {
       .scroll {
         overflow: visible;

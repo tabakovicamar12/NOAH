@@ -55,7 +55,7 @@ type Phase = 'DECODING' | 'READY' | 'FAILED' | 'SAVING';
       </button>
     </div>
 
-    <div class="min-h-0 flex-1 overflow-y-auto">
+    <div class="scroller flex min-h-0 flex-1 flex-col overflow-y-auto">
       <!-- Stage -->
       <div #stage class="relative grid place-items-center px-4 pt-4">
         @switch (phase()) {
@@ -106,7 +106,7 @@ type Phase = 'DECODING' | 'READY' | 'FAILED' | 'SAVING';
         </div>
 
         <!-- Panel -->
-        <div class="panel mt-4 grid gap-4 px-4 pb-6 pt-5 text-ink">
+        <div class="panel mt-4 flex flex-1 flex-col gap-4 px-4 pt-5 text-ink">
           <fieldset>
             <legend class="w-label">{{ i18n.t('photo.category') }}</legend>
             <div class="cats mt-1.5">
@@ -150,7 +150,11 @@ type Phase = 'DECODING' | 'READY' | 'FAILED' | 'SAVING';
             }
           </div>
 
-          <div class="grid gap-2">
+          <p class="w-small w-muted flex items-start gap-1.5">
+            <aon-icon name="shield" [size]="15" class="mt-0.5" />{{ i18n.t('photo.disclaimer') }}
+          </p>
+
+          <div class="acts grid gap-2">
             <button
               type="button"
               class="w-btn w-btn-gold"
@@ -177,9 +181,6 @@ type Phase = 'DECODING' | 'READY' | 'FAILED' | 'SAVING';
                 <aon-icon name="retry" [size]="18" />{{ i18n.t('photo.retake') }}
               </button>
             </div>
-            <p class="w-small w-muted mt-1 flex items-start gap-1.5">
-              <aon-icon name="shield" [size]="15" class="mt-0.5" />{{ i18n.t('photo.disclaimer') }}
-            </p>
           </div>
         </div>
       } @else if (phase() === 'FAILED') {
@@ -198,6 +199,29 @@ type Phase = 'DECODING' | 'READY' | 'FAILED' | 'SAVING';
     .panel {
       border-radius: 1rem 1rem 0 0;
       background: var(--color-panel);
+    }
+    /* A field the browser scrolls to stops above the save bar, not under it. */
+    .scroller {
+      scroll-padding-bottom: 9.5rem;
+    }
+    /* However long the form, saving stays under the thumb. */
+    .acts {
+      position: sticky;
+      bottom: 0;
+      margin-top: auto;
+      z-index: 1;
+      margin-inline: -1rem;
+      padding: 0.6rem 1rem calc(env(safe-area-inset-bottom) + 0.6rem);
+      border-top: 1px solid var(--color-line);
+      background: var(--color-panel);
+    }
+    @media (max-height: 500px) {
+      .scroller {
+        scroll-padding-bottom: 0;
+      }
+      .acts {
+        position: static;
+      }
     }
     .cats {
       display: grid;

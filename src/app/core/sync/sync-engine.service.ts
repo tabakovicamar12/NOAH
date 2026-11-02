@@ -72,7 +72,10 @@ export class SyncEngine {
 
     this.network.reconnected$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       const n = this.unsyncedCount();
-      if (n > 0) this.toast.show(this.i18n.t('net.backOnline', { n }));
+      if (n > 0) {
+        this.toast.show(this.i18n.t('net.backOnline', { n }));
+        this.announceDone = true;
+      }
       void this.runFresh();
     });
 
@@ -154,6 +157,8 @@ export class SyncEngine {
     }
   }
 
+  private announceDone = false;
+
   async run(): Promise<void> {
     if (this.running) {
       this.rerunRequested = true;
@@ -169,7 +174,9 @@ export class SyncEngine {
     } finally {
       this.running = false;
     }
-    if (processed > 0) {
+    // Worth saying only after a wait for the network: online, every tap syncs at once and the status line shows it.
+    if (processed > 0 && this.announceDone) {
+      this.announceDone = false;
       this.toast.success(this.i18n.t('net.syncDone', { n: processed }));
     }
     if (this.rerunRequested) {
@@ -337,7 +344,7 @@ export class SyncEngine {
           return;
         case 'LOG_CREATE':
           await this.db.logs.update(op.payload.id, { synced: 1 });
-          if (op.payload.kind === 'QUANTITY' && remaining === 0) {
+          if ((op.payload.kind === 'QUANTITY' || op.payload.kind === 'MATERIAL') && remaining === 0) {
             await this.db.workOrders.update(op.payload.workOrderId, { dirty: 0 });
           }
           return;

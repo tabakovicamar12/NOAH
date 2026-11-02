@@ -8,11 +8,12 @@ import { ConfirmDeleteComponent } from '../../shared/ui/confirm-delete.component
 import { OrgService } from '../../core/org/org.service';
 import type { TranslationKey } from '../../core/i18n/sl';
 import { ApiError, type PhotoView, type WorkOrderDetailResponse } from '../../core/models/api.models';
-import { PHOTO_CATEGORIES, type LogEntry, type PhotoCategory, type TimeEntry, type WorkOrderStatus } from '../../core/models/domain.models';
+import { PHOTO_CATEGORIES, materialLines, type LogEntry, type PhotoCategory, type TimeEntry, type WorkOrderStatus } from '../../core/models/domain.models';
 import { ClockService } from '../../core/ui/clock.service';
 import { minutesBetween, toIsoDate } from '../../core/util/util';
 import { hm } from '../../core/worktime/worktime';
 import { IconComponent } from '../../shared/ui/icon.component';
+import { PhotoViewerComponent } from '../../shared/ui/photo-viewer.component';
 import type { IconName } from '../../shared/ui/icon.component';
 import { LogoComponent } from '../../shared/ui/logo.component';
 import { ReportStatusComponent } from '../../shared/ui/report-status.component';
@@ -24,7 +25,7 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
 /** One line of the order's history: who did what, when. */
 interface OrderEvent {
   readonly at: number;
-  readonly kind: 'start' | 'stop' | 'qty' | 'fix' | 'note' | 'issue' | 'photo';
+  readonly kind: 'start' | 'stop' | 'qty' | 'mat' | 'fix' | 'note' | 'issue' | 'photo';
   readonly userId: string;
   readonly text: string | null;
   readonly figure: string | null;
@@ -46,7 +47,7 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
  */
 @Component({
   selector: 'aon-order-page',
-  imports: [RouterLink, NgTemplateOutlet, ConfirmDeleteComponent, IconComponent, LogoComponent, ReportStatusComponent],
+  imports: [RouterLink, NgTemplateOutlet, ConfirmDeleteComponent, IconComponent, LogoComponent, ReportStatusComponent, PhotoViewerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(document:keydown.escape)': 'openPhoto.set(null); crewOpen.set(false)',
@@ -56,15 +57,15 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
   template: `
     <div class="op">
       <nav class="bar no-print" [attr.aria-label]="i18n.t('op.nav')">
-        <a routerLink="/m" class="back"><aon-icon name="arrow-left" [size]="18" [stroke]="2" />{{ i18n.t('mgr.navOrders') }}</a>
+        <a routerLink="/m" class="m-back" [attr.aria-label]="i18n.t('common.back') + ': ' + i18n.t('mgr.navOrders')"><aon-icon name="arrow-left" [size]="20" [stroke]="2.2" /></a>
         @if (data(); as d) {
           <div class="tools">
-            <a class="tool" [routerLink]="['/m/orders', d.order.id, 'edit']"><aon-icon name="pencil" [size]="17" />{{ i18n.t('drill.edit') }}</a>
-            <a class="tool" routerLink="/m/orders/new" [queryParams]="{ from: d.order.id }"><aon-icon name="copy" [size]="17" />{{ i18n.t('drill.duplicate') }}</a>
+            <a class="m-btn m-btn-line" [routerLink]="['/m/orders', d.order.id, 'edit']"><aon-icon name="pencil" [size]="17" />{{ i18n.t('drill.edit') }}</a>
+            <a class="m-btn m-btn-line" routerLink="/m/orders/new" [queryParams]="{ from: d.order.id }"><aon-icon name="copy" [size]="17" />{{ i18n.t('drill.duplicate') }}</a>
             @if (isAdmin()) {
-              <button type="button" class="tool is-danger" (click)="askDelete()"><aon-icon name="trash" [size]="17" />{{ i18n.t('op.delete') }}</button>
+              <button type="button" class="m-btn m-btn-danger" (click)="askDelete()"><aon-icon name="trash" [size]="17" />{{ i18n.t('op.delete') }}</button>
             }
-            <button type="button" class="tool is-main" (click)="print()"><aon-icon name="printer" [size]="17" />{{ i18n.t('op.print') }}</button>
+            <button type="button" class="m-btn m-btn-gold" (click)="print()"><aon-icon name="printer" [size]="17" />{{ i18n.t('op.print') }}</button>
           </div>
           @if (deleting()) {
             <aon-confirm-delete
@@ -361,11 +362,24 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
                 </section>
 
                 <section class="block">
-                  <h2 class="h2">{{ i18n.t('drill.material') }}<span class="cnt">{{ o.materials.length }}</span></h2>
-                  @if (o.materials.length) {
+                  <h2 class="h2">{{ i18n.t('drill.material') }}<span class="cnt">{{ materialRows().length }}</span></h2>
+                  @if (materialRows().length) {
                     <ul class="mat">
-                      @for (m of o.materials; track $index) {
-                        <li><span>{{ m.name }}</span><span class="num muted">{{ m.qty !== null ? i18n.number(m.qty) : '' }} {{ m.unit ?? '' }}</span></li>
+                      @for (m of materialRows(); track m.key) {
+                        <li>
+                          <span class="mat-main">
+                            <span class="mat-name">{{ m.name }}@if (m.extra) {<span class="mat-extra">{{ i18n.t('mat.extra') }}</span>}</span>
+                            <span class="num muted">
+                              {{ i18n.t('mat.usedLine', { q: i18n.number(m.used), unit: m.unit ?? '' }) }}
+                              @if (m.planned !== null) {
+                                · {{ i18n.t('mat.planLine', { q: i18n.number(m.planned), unit: m.unit ?? '' }) }}
+                              }
+                            </span>
+                          </span>
+                          @if (m.planned !== null && m.used > 0) {
+                            <span class="num mat-diff" [class.is-over]="m.used > m.planned">{{ signed(m.used - m.planned) }} {{ m.unit ?? '' }}</span>
+                          }
+                        </li>
                       }
                     </ul>
                   } @else {
@@ -506,19 +520,23 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
 
                 <section class="sec keep">
                   <h2 class="h">{{ i18n.t('drill.material') }}</h2>
-                  @if (o.materials.length) {
+                  @if (materialRows().length) {
                     <table class="t">
                       <thead>
                         <tr>
                           <th scope="col">{{ i18n.t('op.colMaterial') }}</th>
-                          <th scope="col" class="r">{{ i18n.t('drill.qty') }}</th>
+                          <th scope="col" class="r">{{ i18n.t('form.materialPlan') }}</th>
+                          <th scope="col" class="r">{{ i18n.t('mat.colUsed') }}</th>
+                          <th scope="col" class="r">{{ i18n.t('mat.colDiff') }}</th>
                         </tr>
                       </thead>
                       <tbody>
-                        @for (m of o.materials; track $index) {
+                        @for (m of materialRows(); track m.key) {
                           <tr>
-                            <th scope="row">{{ m.name }}</th>
-                            <td class="r num nowrap">{{ m.qty !== null ? i18n.number(m.qty) : '–' }} {{ m.unit ?? '' }}</td>
+                            <th scope="row">{{ m.name }}@if (m.extra) { ({{ i18n.t('mat.extra') }})}</th>
+                            <td class="r num nowrap">{{ m.planned !== null ? i18n.number(m.planned) : '–' }} {{ m.unit ?? '' }}</td>
+                            <td class="r num nowrap">{{ i18n.number(m.used) }} {{ m.unit ?? '' }}</td>
+                            <td class="r num nowrap">{{ m.planned !== null && m.used > 0 ? signed(m.used - m.planned) : '–' }}</td>
                           </tr>
                         }
                       </tbody>
@@ -624,27 +642,17 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
     @if (openPhoto() !== null && data(); as d) {
       @let p = d.photos[openPhoto()!];
       @if (p) {
-        <div class="lb" role="dialog" aria-modal="true" [attr.aria-label]="i18n.t(photoKey(p.category))" (click)="openPhoto.set(null)">
-          <div class="lb-top" (click)="$event.stopPropagation()">
-            <p>
-              <b>{{ i18n.t(photoKey(p.category)) }}</b>
-              <span>{{ p.userName }} · {{ i18n.date(p.createdAt) }} {{ i18n.time(p.createdAt) }} · {{ i18n.t('order.numberLabel', { code: d.order.code ?? '–' }) }}</span>
-            </p>
-            <button type="button" class="lb-x" [attr.aria-label]="i18n.t('common.close')" (click)="openPhoto.set(null)"><aon-icon name="x" [size]="22" /></button>
-          </div>
-          <div class="lb-img" (click)="$event.stopPropagation()">
-            @if (p.url) {
-              <img [src]="p.url" [alt]="p.caption || i18n.t(photoKey(p.category))" />
-            }
-            @if (d.photos.length > 1) {
-              <button type="button" class="lb-nav is-prev" [attr.aria-label]="i18n.t('op.prevPhoto')" (click)="stepPhoto(-1)"><aon-icon name="chevron-left" [size]="26" /></button>
-              <button type="button" class="lb-nav is-next" [attr.aria-label]="i18n.t('op.nextPhoto')" (click)="stepPhoto(1)"><aon-icon name="chevron-right" [size]="26" /></button>
-            }
-          </div>
-          @if (p.caption) {
-            <p class="lb-cap" (click)="$event.stopPropagation()">{{ p.caption }}</p>
-          }
-        </div>
+        <aon-photo-viewer
+          [src]="p.url"
+          [alt]="p.caption || i18n.t(photoKey(p.category))"
+          [title]="i18n.t(photoKey(p.category))"
+          [meta]="p.userName + ' · ' + i18n.date(p.createdAt) + ' ' + i18n.time(p.createdAt) + ' · ' + i18n.t('order.numberLabel', { code: d.order.code ?? '–' })"
+          [caption]="p.caption"
+          [index]="openPhoto()!"
+          [total]="d.photos.length"
+          (step)="stepPhoto($event)"
+          (closed)="openPhoto.set(null)"
+        />
       }
     }
   `,
@@ -655,7 +663,7 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
     .op {
       max-width: 84rem;
       margin: 0 auto;
-      padding: 1rem 2rem 3rem;
+      padding: 1rem var(--m-gutter) 3rem;
     }
     .num {
       font-variant-numeric: tabular-nums;
@@ -676,51 +684,10 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
       justify-content: space-between;
       gap: 0.6rem 1rem;
     }
-    .back {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.45rem;
-      min-height: 2.75rem;
-      color: var(--color-text-muted);
-      font-weight: 550;
-      text-decoration: none;
-    }
-    .back:hover {
-      color: var(--color-text);
-    }
     .tools {
       display: flex;
       flex-wrap: wrap;
       gap: 0.45rem;
-    }
-    .tool {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.45rem;
-      min-height: 2.6rem;
-      padding: 0 0.9rem;
-      border: 1px solid var(--color-line-strong);
-      border-radius: 0.55rem;
-      background: var(--color-panel);
-      color: var(--color-text);
-      font-weight: 600;
-      text-decoration: none;
-      transition: border-color 150ms var(--ease-out-expo);
-    }
-    .tool:hover {
-      border-color: var(--color-text-muted);
-    }
-    .tool.is-main {
-      border-color: var(--color-gold);
-      background: var(--color-gold);
-      color: var(--color-charcoal);
-    }
-    .tool.is-danger {
-      color: var(--color-bad-ink);
-    }
-    .tool.is-danger:hover {
-      border-color: var(--color-bad);
-      background: var(--color-bad-tint);
     }
 
     /* Head: the document's identity. The site drawing sits behind it on the right, melted into the paper. */
@@ -1457,6 +1424,33 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
     .mat li:last-child {
       border-bottom: 0;
     }
+    .mat-main {
+      display: grid;
+      min-width: 0;
+    }
+    .mat-name {
+      font-weight: 500;
+      overflow-wrap: anywhere;
+    }
+    .mat-extra {
+      display: inline-block;
+      margin-left: 0.4rem;
+      padding: 0 0.45rem;
+      border-radius: 9999px;
+      background: var(--color-field);
+      color: var(--color-text-muted);
+      font-size: 0.78rem;
+      font-weight: 500;
+    }
+    .mat-diff {
+      flex: 0 0 auto;
+      color: var(--color-text-muted);
+      white-space: nowrap;
+    }
+    .mat-diff.is-over {
+      color: var(--color-bad);
+      font-weight: 600;
+    }
     .reps {
       display: grid;
       gap: 0.4rem;
@@ -1512,79 +1506,6 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
     }
 
     /* Lightbox */
-    .lb {
-      position: fixed;
-      inset: 0;
-      z-index: 80;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr) auto;
-      background: rgb(20 20 20 / 0.94);
-      color: #fff;
-      animation: lb-in 200ms var(--ease-out-expo) both;
-    }
-    @keyframes lb-in {
-      from {
-        opacity: 0;
-      }
-    }
-    .lb-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      padding: 1rem 1.25rem;
-    }
-    .lb-top p {
-      display: grid;
-    }
-    .lb-top span {
-      color: var(--color-rail-muted);
-      font-size: 0.9rem;
-    }
-    .lb-x {
-      display: grid;
-      place-items: center;
-      width: 3rem;
-      height: 3rem;
-      border-radius: 0.6rem;
-      background: rgb(255 255 255 / 0.1);
-    }
-    .lb-img {
-      position: relative;
-      display: grid;
-      place-items: center;
-      min-height: 0;
-      padding: 0 4.5rem;
-    }
-    .lb-img img {
-      max-width: 100%;
-      max-height: 100%;
-      object-fit: contain;
-      border-radius: 0.4rem;
-    }
-    .lb-nav {
-      position: absolute;
-      top: 50%;
-      display: grid;
-      place-items: center;
-      width: 3.25rem;
-      height: 3.25rem;
-      border-radius: 9999px;
-      background: rgb(255 255 255 / 0.12);
-      transform: translateY(-50%);
-    }
-    .lb-nav.is-prev {
-      left: 1rem;
-    }
-    .lb-nav.is-next {
-      right: 1rem;
-    }
-    .lb-cap {
-      max-width: 60rem;
-      margin: 0 auto;
-      padding: 0.9rem 1.25rem 1.25rem;
-      text-align: center;
-    }
     /* The printed order: ink on paper, hairlines, one heavy rule under the head; colour only where it means
        something. Hidden on screen, it replaces the whole page in print. */
     .sheet {
@@ -1936,7 +1857,8 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
     }
     @media (max-width: 700px) {
       .op {
-        padding: 0.75rem 0.9rem 2rem;
+        padding-top: 0.75rem;
+        padding-bottom: 2rem;
       }
       .head {
         padding: 1.2rem 1.1rem 1.1rem;
@@ -1971,17 +1893,8 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
       .tools {
         width: 100%;
       }
-      .tool {
+      .tools .m-btn {
         flex: 1 1 auto;
-        justify-content: center;
-      }
-      .lb-img {
-        padding: 0 0.5rem;
-      }
-      .lb-nav {
-        top: auto;
-        bottom: -3.75rem;
-        transform: none;
       }
     }
 
@@ -2057,6 +1970,10 @@ export class OrderPageComponent {
     return !!o?.dueDate && o.status !== 'COMPLETED' && o.dueDate < toIsoDate();
   });
 
+  protected readonly materialRows = computed(() => {
+    const o = this.data()?.order;
+    return o ? materialLines(o) : [];
+  });
   private readonly segments = computed(() => (this.data()?.timeEntries ?? []).filter((e) => e.kind === 'ORDER'));
   protected readonly totalMinutes = computed(() => {
     const now = this.clock.now();
@@ -2109,6 +2026,9 @@ export class OrderPageComponent {
       if (l.kind === 'QUANTITY') {
         const q = l.quantity ?? 0;
         events.push({ at: l.createdAt, kind: q < 0 ? 'fix' : 'qty', userId: l.userId, text: l.text, figure: `${q < 0 ? '−' : '+'}${this.i18n.number(Math.abs(q))} ${unit}`, photo: null });
+      } else if (l.kind === 'MATERIAL') {
+        const q = l.quantity ?? 0;
+        events.push({ at: l.createdAt, kind: q < 0 ? 'fix' : 'mat', userId: l.userId, text: l.text, figure: `${l.materialName ?? ''} ${q < 0 ? '−' : '+'}${this.i18n.number(Math.abs(q))} ${l.materialUnit ?? ''}`, photo: null });
       } else {
         events.push({ at: l.createdAt, kind: l.kind === 'ISSUE' ? 'issue' : 'note', userId: l.userId, text: l.text, figure: null, photo: null });
       }
@@ -2305,8 +2225,13 @@ export class OrderPageComponent {
     return `photoCat.${c}` as TranslationKey;
   }
 
+  protected signed(n: number): string {
+    const rounded = Math.round(n * 100) / 100;
+    return `${rounded > 0 ? '+' : rounded < 0 ? '−' : ''}${this.i18n.number(Math.abs(rounded))}`;
+  }
+
   protected eventIcon(kind: OrderEvent["kind"]): IconName {
-    return ({ start: 'play', stop: 'stop', qty: 'plus', fix: 'undo', note: 'note', issue: 'alert', photo: 'camera' } as const)[kind];
+    return ({ start: 'play', stop: 'stop', qty: 'plus', mat: 'package', fix: 'undo', note: 'note', issue: 'alert', photo: 'camera' } as const)[kind];
   }
 
   protected eventLabel(e: OrderEvent): string {

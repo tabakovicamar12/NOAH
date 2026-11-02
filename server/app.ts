@@ -48,6 +48,7 @@ import {
   type TimeEntry,
   type WorkOrderStatus,
 } from '../src/app/core/models/domain.models';
+import { applyMaterialUsage, type MaterialUsage } from '../src/app/core/models/domain.models';
 import { houseModel } from '../src/app/core/models/house-catalog';
 import { LoginThrottle, hashPassword, issueToken, readFileKey, readToken, verifyPassword } from './auth';
 import type { ServerConfig } from './config';
@@ -237,6 +238,11 @@ function today(): IsoDate {
  * Runs a mutation exactly once per Idempotency-Key. The key is claimed inside the same transaction as
  * the change, so a failed mutation leaves the key free for the device's retry.
  */
+function toMaterialUsage(raw: unknown): MaterialUsage[] {
+  const value: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  return Array.isArray(value) ? (value as MaterialUsage[]) : [];
+}
+
 async function idempotent(c: Context<Env>, fn: (db: Db) => Promise<void>): Promise<Response> {
   const key = c.req.header('Idempotency-Key');
   if (!key || key.length > 100) throw new HttpError(400, 'Idempotency-Key header required');
@@ -515,10 +521,25 @@ export function createApp(config: ServerConfig): Hono<Env> {
       const order = (await db.query(`select planned_qty from work_orders where id = $1`, [orderId]))[0];
       if (!order) throw new HttpError(404, 'Work order not found');
       if (!(await inCrew(db, orderId, me.id))) throw new HttpError(403, 'Not in this crew');
-      if (!['QUANTITY', 'NOTE', 'ISSUE'].includes(body.kind)) throw new HttpError(400, 'kind invalid');
+      if (!['QUANTITY', 'MATERIAL', 'NOTE', 'ISSUE'].includes(body.kind)) throw new HttpError(400, 'kind invalid');
       let quantity: number | null = null;
       let text: string | null = null;
-      if (body.kind === 'QUANTITY') {
+      let materialName: string | null = null;
+      let materialUnit: string | null = null;
+      if (body.kind === 'MATERIAL') {
+        materialName = requireString(body.materialName, 'materialName', 80).trim();
+        if (!materialName) throw new HttpError(400, 'materialName required');
+        materialUnit = typeof body.materialUnit === 'string' && body.materialUnit.trim() ? body.materialUnit.trim().slice(0, 12) : null;
+        quantity = requireNumber(body.quantity, 'quantity');
+        if (quantity === 0 || Math.abs(quantity) > 100_000) throw new HttpError(400, 'quantity out of range');
+        if (quantity < 0) text = requireString(body.text, 'text', 500).trim() || null;
+        if (quantity < 0 && !text) throw new HttpError(400, 'A correction needs a reason');
+        // Two phones can post at once: the row lock keeps the running total exact.
+        const locked = (await db.query(`select material_usage from work_orders where id = $1 for update`, [orderId]))[0];
+        const next = applyMaterialUsage(toMaterialUsage(locked?.['material_usage']), materialName, materialUnit, quantity);
+        if (!next) throw new HttpError(409, 'MATERIAL_BELOW_ZERO');
+        await db.query(`update work_orders set material_usage = $2::text::jsonb, updated_at = $3 where id = $1`, [orderId, JSON.stringify(next), Date.now()]);
+      } else if (body.kind === 'QUANTITY') {
         if (Number(order['planned_qty']) === 0) throw new HttpError(409, 'NO_QUANTITY');
         quantity = requireNumber(body.quantity, 'quantity');
         if (quantity === 0 || Math.abs(quantity) > 100_000) throw new HttpError(400, 'quantity out of range');
@@ -534,9 +555,9 @@ export function createApp(config: ServerConfig): Hono<Env> {
         text = requireString(body.text, 'text', 2000);
       }
       await db.query(
-        `insert into logs (id, user_id, work_order_id, kind, quantity, text, created_at) values ($1, $2, $3, $4, $5, $6, $7)
+        `insert into logs (id, user_id, work_order_id, kind, quantity, material_name, material_unit, text, created_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          on conflict (id) do nothing`,
-        [requireId(body.id, 'id'), me.id, orderId, body.kind, quantity, text, requireNumber(body.createdAt, 'createdAt')],
+        [requireId(body.id, 'id'), me.id, orderId, body.kind, quantity, materialName, materialUnit, text, requireNumber(body.createdAt, 'createdAt')],
       );
     });
   });

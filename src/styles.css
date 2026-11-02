@@ -678,7 +678,7 @@
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  min-height: 2.6rem;
+  min-height: 2.75rem;
   border-radius: 0.5rem;
   color: var(--color-text-muted);
   font-size: 0.93rem;
@@ -912,6 +912,149 @@ html.mgr-scale {
 }
 .flt-btn[aria-pressed='true'] .flt-n {
   color: #8a6d2a;
+}
+
+/* Phones: every filter stays in view. The options wrap into full rows, nothing hides behind a sideways scroll. */
+@media (max-width: 700px) {
+  .flt {
+    display: flex;
+    width: 100%;
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+  .flt-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-height: var(--m-tap);
+  }
+}
+
+/*
+ * Desk kit: the one back button, button family, search field and page frame every manager screen is built from.
+ * --m-tap keeps controls at the 44px touch minimum on the 15px root; --m-gutter is the one page margin.
+ */
+:root {
+  --m-tap: max(2.75rem, 44px);
+  --m-gutter: clamp(0.9rem, 2.4vw, 2rem);
+}
+.m-page {
+  padding-top: 1.25rem;
+  padding-inline: var(--m-gutter);
+}
+.m-title {
+  font-size: clamp(1.6rem, 1.3rem + 1.2vw, 2.09rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.m-back {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: var(--m-tap);
+  height: var(--m-tap);
+  border: 1px solid var(--color-line-strong);
+  border-radius: 0.5rem;
+  background: var(--color-panel);
+  color: var(--color-text);
+  transition: background-color 150ms var(--ease-out-expo);
+}
+.m-back:hover {
+  background: var(--color-field);
+}
+.m-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-width: var(--m-tap);
+  min-height: var(--m-tap);
+  padding: 0 1rem;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background-color 150ms var(--ease-out-expo),
+    border-color 150ms var(--ease-out-expo),
+    filter 150ms var(--ease-out-expo),
+    transform 120ms var(--ease-out-expo);
+}
+.m-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.m-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.m-btn-gold {
+  background: var(--color-gold);
+  color: var(--color-charcoal);
+  box-shadow: 0 1px 2px rgb(20 20 20 / 0.12), inset 0 -2px 0 rgb(0 0 0 / 0.08);
+}
+.m-btn-gold:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+.m-btn-line {
+  border-color: var(--color-line-strong);
+  background: var(--color-panel);
+  color: var(--color-text);
+  font-weight: 500;
+}
+.m-btn-line:hover:not(:disabled) {
+  background: var(--color-field);
+}
+.m-btn-dark {
+  background: var(--color-rail);
+  color: #fff;
+}
+.m-btn-dark:hover:not(:disabled) {
+  background: var(--color-charcoal);
+}
+.m-btn-danger {
+  border-color: var(--color-line-strong);
+  background: var(--color-panel);
+  color: var(--color-bad-ink);
+  font-weight: 500;
+}
+.m-btn-danger:hover:not(:disabled) {
+  border-color: var(--color-bad);
+  background: var(--color-bad-tint);
+}
+.m-btn-icon {
+  width: var(--m-tap);
+  padding: 0;
+}
+.m-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  height: var(--m-tap);
+  padding: 0 0.85rem;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 0.5rem;
+  background: var(--color-panel);
+  color: var(--color-text-muted);
+  box-shadow: 0 1px 2px rgb(20 20 20 / 0.04);
+}
+.m-search:focus-within {
+  border-color: var(--color-gold);
+  box-shadow: 0 0 0 3px rgb(193 160 80 / 0.18);
+}
+.m-search input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  outline: none;
+}
+.m-search input::placeholder {
+  color: var(--color-text-muted);
 }
 
 /* Worker: a started order grows from its row into the running card. */

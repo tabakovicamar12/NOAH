@@ -6,10 +6,12 @@ import { liveSignal } from '../../../core/db/live';
 import { ApiClient } from '../../../core/http/api-client.service';
 import { ApiError } from '../../../core/models/api.models';
 import {
+  applyMaterialUsage,
   hasQuantity,
   type EpochMs,
   type LogEntry,
   type Material,
+  type MaterialUsage,
   type PhotoCategory,
   type PhotoMeta,
   type ReportOrderLine,
@@ -41,6 +43,7 @@ export class WorkflowError extends Error {
     readonly code:
       | 'NO_SESSION'
       | 'NO_SHIFT'
+      | 'ORDER_NOT_STARTED'
       | 'SHIFT_OPEN'
       | 'STALE_SHIFT'
       | 'NOT_FOUND'
@@ -285,7 +288,9 @@ export class WorkerStore {
           .filter((l) => l.kind === 'NOTE')
           .map((l) => l.text ?? '')
           .join('\n'),
-        materialsUsed: (order?.materials ?? []).map((m) => ({ name: m.name, qty: null, unit: m.unit })),
+        materialsUsed: logs
+          .filter((l) => l.kind === 'MATERIAL' && l.materialName)
+          .reduce<readonly MaterialUsage[]>((sum, l) => applyMaterialUsage(sum, l.materialName ?? '', l.materialUnit ?? null, l.quantity ?? 0) ?? sum, []),
         issues: logs.filter((l) => l.kind === 'ISSUE').map((l) => l.text ?? ''),
         photoCount: this.todayPhotos().filter((p) => p.workOrderId === id).length,
       };
@@ -404,7 +409,9 @@ export class WorkerStore {
   async startOrder(orderId: string): Promise<void> {
     const uid = this.requireUid();
     if (this.dayClosed()) throw new WorkflowError('DAY_CLOSED');
-    if (!this.openShift()) throw new WorkflowError('NO_SHIFT');
+    // A shift started a moment ago is on the device already, even if the live signal has not caught up yet.
+    const shift = this.openShift() ?? (await this.db.timeEntries.filter((e) => e.userId === uid && e.kind === 'SHIFT' && e.endedAt === null).first());
+    if (!shift) throw new WorkflowError('NO_SHIFT');
     if (this.staleShift()) throw new WorkflowError('STALE_SHIFT');
     const order = this.findOrder(orderId);
     if (order.status !== 'IN_PROGRESS' && !this.canTransition(order.status, 'IN_PROGRESS')) {
@@ -442,9 +449,19 @@ export class WorkerStore {
   }
 
   /** Any crew member may finish the order for the whole crew; it stops only their own timer. */
+  /** Whether this worker's timer is on this order. Everything written on an order needs it. */
+  isRunning(orderId: string): boolean {
+    return this.activeSegment()?.workOrderId === orderId;
+  }
+
+  private requireRunning(orderId: string): void {
+    if (!this.isRunning(orderId)) throw new WorkflowError('ORDER_NOT_STARTED');
+  }
+
   async finishOrder(orderId: string): Promise<void> {
     const uid = this.requireUid();
     if (this.dayClosed()) throw new WorkflowError('DAY_CLOSED');
+    this.requireRunning(orderId);
     const order = this.findOrder(orderId);
     if (!this.canTransition(order.status, 'COMPLETED')) throw new WorkflowError('INVALID_TRANSITION');
     const now = Date.now();
@@ -459,6 +476,7 @@ export class WorkerStore {
   async addQuantity(orderId: string, quantity: number): Promise<void> {
     const uid = this.requireUid();
     if (this.dayClosed()) throw new WorkflowError('DAY_CLOSED');
+    this.requireRunning(orderId);
     if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 100_000) throw new WorkflowError('INVALID_INPUT');
     const order = this.findOrder(orderId);
     // A task without a quantity is done by completing it; the server refuses quantities on it too.
@@ -480,6 +498,7 @@ export class WorkerStore {
   async correctQuantity(orderId: string, amount: number, reason: string): Promise<void> {
     const uid = this.requireUid();
     if (this.dayClosed()) throw new WorkflowError('DAY_CLOSED');
+    this.requireRunning(orderId);
     const order = this.findOrder(orderId);
     const q = Math.round(amount * 100) / 100;
     const why = reason.trim();
@@ -493,8 +512,28 @@ export class WorkerStore {
     this.sync.nudge();
   }
 
+  async addMaterial(orderId: string, name: string, unit: string | null, quantity: number): Promise<void> {
+    const uid = this.requireUid();
+    if (this.dayClosed()) throw new WorkflowError('DAY_CLOSED');
+    this.requireRunning(orderId);
+    if (!name.trim() || !Number.isFinite(quantity) || quantity <= 0 || quantity > 100_000) throw new WorkflowError('INVALID_INPUT');
+    await this.logMaterial(uid, this.findOrder(orderId), name, unit, Math.round(quantity * 100) / 100, null);
+  }
+
+  /** Takes back material logged by mistake. The wrong entry stays in the history, with the reason beside it. */
+  async correctMaterial(orderId: string, name: string, unit: string | null, amount: number, reason: string): Promise<void> {
+    const uid = this.requireUid();
+    if (this.dayClosed()) throw new WorkflowError('DAY_CLOSED');
+    this.requireRunning(orderId);
+    const q = Math.round(amount * 100) / 100;
+    const why = reason.trim();
+    if (!Number.isFinite(q) || q <= 0 || !why) throw new WorkflowError('INVALID_INPUT');
+    await this.logMaterial(uid, this.findOrder(orderId), name, unit, -q, why.slice(0, 500));
+  }
+
   async addNote(orderId: string, text: string): Promise<void> {
     const uid = this.requireUid();
+    this.requireRunning(orderId);
     const clean = text.trim();
     if (!clean) throw new WorkflowError('INVALID_INPUT');
     this.findOrder(orderId);
@@ -509,6 +548,7 @@ export class WorkerStore {
   /** Logs the issue, flags the order PROBLEM and stops this worker's timer on it. */
   async reportIssue(orderId: string, text: string): Promise<void> {
     const uid = this.requireUid();
+    this.requireRunning(orderId);
     const clean = text.trim();
     if (!clean) throw new WorkflowError('INVALID_INPUT');
     const order = this.findOrder(orderId);
@@ -537,6 +577,7 @@ export class WorkerStore {
     readonly height: number;
     readonly maskCount: number;
   }): Promise<void> {
+    this.requireRunning(input.orderId);
     const uid = this.requireUid();
     const order = this.findOrder(input.orderId);
     const meta: PhotoMeta = {
@@ -620,7 +661,8 @@ export class WorkerStore {
     const lines = this.reportLines().map((l) => ({
       ...l,
       workDone: (draft.workDone[l.workOrderId] ?? l.workDone).trim().slice(0, 4000),
-      materialsUsed: (draft.materials[l.workOrderId] ?? l.materialsUsed).filter((m) => m.name.trim() !== ''),
+      // What was logged on the order is the record; text from an older returned report only stands in when nothing was.
+      materialsUsed: l.materialsUsed.length ? l.materialsUsed : (draft.materials[l.workOrderId] ?? []).filter((m) => m.name.trim() !== ''),
     }));
     const summary: LocalSummary = {
       id: summaryId(uid, date),
@@ -716,8 +758,21 @@ export class WorkerStore {
     return order;
   }
 
-  private newLog(uid: string, orderId: string, kind: LogEntry['kind'], quantity: number | null, text: string | null): LocalLogEntry {
-    return { id: uuid(), userId: uid, workOrderId: orderId, kind, quantity, text, createdAt: Date.now(), synced: 0 };
+  private newLog(uid: string, orderId: string, kind: LogEntry['kind'], quantity: number | null, text: string | null, material?: { readonly name: string; readonly unit: string | null }): LocalLogEntry {
+    return { id: uuid(), userId: uid, workOrderId: orderId, kind, quantity, materialName: material?.name ?? null, materialUnit: material?.unit ?? null, text, createdAt: Date.now(), synced: 0 };
+  }
+
+  /** One entry for one material: saved on the device with the order's running total, then queued. */
+  private async logMaterial(uid: string, order: LocalWorkOrder, name: string, unit: string | null, delta: number, text: string | null): Promise<void> {
+    const usage = applyMaterialUsage(order.materialUsage ?? [], name, unit, delta);
+    if (!usage) throw new WorkflowError('INVALID_INPUT');
+    const log = this.newLog(uid, order.id, 'MATERIAL', delta, text, { name: name.trim(), unit });
+    await this.db.transaction('rw', [this.db.logs, this.db.workOrders, this.db.syncQueue], async () => {
+      await this.db.logs.add(log);
+      await this.db.workOrders.update(order.id, { materialUsage: usage, dirty: 1, updatedAt: log.createdAt });
+      await this.db.syncQueue.add(queueItem(uid, entityKeys.order(order.id), { type: 'LOG_CREATE', payload: stripLocal(log) }));
+    });
+    this.sync.nudge();
   }
 
   /** Must run inside a transaction that includes timeEntries and syncQueue. */

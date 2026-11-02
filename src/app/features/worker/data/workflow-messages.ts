@@ -5,6 +5,7 @@ import { WorkflowError } from './worker-store.service';
 const MESSAGES: Readonly<Record<WorkflowError['code'], TranslationKey>> = {
   NO_SESSION: 'common.errorGeneric',
   NO_SHIFT: 'order.needShift',
+  ORDER_NOT_STARTED: 'order.startToLog',
   SHIFT_OPEN: 'day.needEnd',
   STALE_SHIFT: 'stale.blocked',
   NOT_FOUND: 'order.notFound',

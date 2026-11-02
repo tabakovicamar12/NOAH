@@ -460,7 +460,8 @@ function toLocalInput(ms: number): string {
     .nx { display: flex; align-items: center; gap: 0.5rem; padding-right: 0.7rem; border-radius: 1rem; background: var(--color-panel); box-shadow: 0 1px 2px rgb(20 20 20 / 0.05); }
     .nx.is-bad { background: var(--color-bad-tint); }
     .nx-main { display: grid; flex: 1 1 auto; gap: 0.15rem; min-width: 0; min-height: 4rem; padding: 0.7rem 0 0.7rem 0.9rem; color: var(--color-text); text-decoration: none; }
-    .nx-title { overflow: hidden; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    /* A long job name wraps once rather than hiding the words that tell two jobs apart. */
+    .nx-title { display: -webkit-box; overflow: hidden; font-weight: 650; line-height: 1.25; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
     .is-bad .nx-title { color: var(--color-bad-ink); }
     .nx-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 0.55rem; color: var(--color-text-muted); font-size: 0.82rem; }
     .is-bad .nx-meta { color: var(--color-bad-ink); }

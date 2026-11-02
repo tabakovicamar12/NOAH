@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { SessionStore } from '../../core/auth/session.store';
 import { I18nService } from '../../core/i18n/i18n.service';
-import { hasQuantity, type QuantityUnit, type WorkOrderStatus } from '../../core/models/domain.models';
+import { hasQuantity, materialLines, type QuantityUnit, type WorkOrderStatus } from '../../core/models/domain.models';
 import { ClockService } from '../../core/ui/clock.service';
 import { ToastService } from '../../core/ui/toast.service';
 import { formatClock } from '../../core/util/util';
@@ -12,6 +12,7 @@ import { IconComponent } from '../../shared/ui/icon.component';
 import { progressRatio } from '../../shared/ui/tag-style';
 import { WorkerStore } from './data/worker-store.service';
 import { orderElapsedMs, workflowMessage } from './data/workflow-messages';
+import { OrderMaterialsComponent } from './order-materials.component';
 import { OrderPhotosComponent } from './photo/order-photos.component';
 
 const QUICK_STEPS: Readonly<Record<QuantityUnit, readonly number[]>> = {
@@ -29,11 +30,11 @@ type NoteMode = 'NOTE' | 'ISSUE';
 
 @Component({
   selector: 'aon-order-detail',
-  imports: [FormsModule, RouterLink, IconComponent, OrderPhotosComponent],
+  imports: [FormsModule, RouterLink, IconComponent, OrderMaterialsComponent, OrderPhotosComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="w-page">
-      <a routerLink="/w/orders" class="w-back"><aon-icon name="arrow-left" [size]="18" [stroke]="2" />{{ i18n.t('order.backToList') }}</a>
+      <a routerLink="/w/orders" class="m-back back" [attr.aria-label]="i18n.t('order.backToList')"><aon-icon name="arrow-left" [size]="20" [stroke]="2.2" /></a>
 
       @if (order(); as o) {
         <div class="w-stack">
@@ -103,6 +104,9 @@ type NoteMode = 'NOTE' | 'ISSUE';
                 @if (crewmates().length) {
                   <p class="note">{{ i18n.t('order.finishCrewHint') }}</p>
                 }
+                @if (materialsUnlogged()) {
+                  <p class="note">{{ i18n.t('mat.finishHint', { n: materialsUnlogged() }) }}</p>
+                }
               }
             }
           </div>
@@ -116,7 +120,10 @@ type NoteMode = 'NOTE' | 'ISSUE';
             </h2>
             <div class="w-bar mt-2.5" aria-hidden="true"><span [style.width.%]="progressRatio(o.doneQty, o.plannedQty) * 100"></span></div>
 
-            @if (o.status !== 'COMPLETED' && !store.dayClosed()) {
+            @if (waitingForStart()) {
+              <p class="w-small w-muted mt-2">{{ i18n.t('order.startToLog') }}</p>
+            }
+            @if (canLog()) {
               <div class="w-trio mt-3" role="group" [attr.aria-label]="i18n.t('order.quantityAria')">
                 @for (step of steps(); track step) {
                   <button
@@ -150,7 +157,7 @@ type NoteMode = 'NOTE' | 'ISSUE';
                 </button>
               </form>
             }
-            @if (o.doneQty > 0 && !store.dayClosed()) {
+            @if (o.doneQty > 0 && canLog()) {
               @if (!correcting()) {
                 <button type="button" class="fix-link" (click)="correcting.set(true)"><aon-icon name="undo" [size]="15" />{{ i18n.t('order.fixQty') }}</button>
               } @else {
@@ -176,12 +183,17 @@ type NoteMode = 'NOTE' | 'ISSUE';
             <p class="w-alert is-info"><aon-icon name="check" [size]="18" />{{ i18n.t('order.noQuantityHint') }}</p>
           }
 
-          <aon-order-photos id="photos" class="anchor" [order]="o" [orderLabel]="o.code ?? ''" />
+          <aon-order-materials [order]="o" [canLog]="canLog()" [waiting]="waitingForStart()" />
+
+          <aon-order-photos id="photos" class="anchor" [order]="o" [orderLabel]="o.code ?? ''" [canLog]="canLog()" [waiting]="waitingForStart()" />
 
           <!-- Notes and problems -->
           <section id="note" class="w-card anchor" aria-labelledby="notes-title">
             <h2 id="notes-title" class="w-h2">{{ i18n.t('order.notesTitle') }}</h2>
-            @if (o.status !== 'COMPLETED') {
+            @if (waitingForStart()) {
+              <p class="w-small w-muted mt-2">{{ i18n.t('order.startToLog') }}</p>
+            }
+            @if (canLog()) {
               <div class="w-seg mt-3" role="group" [attr.aria-label]="i18n.t('order.notesTitle')">
                 <button type="button" [attr.aria-pressed]="mode() === 'NOTE'" (click)="mode.set('NOTE')">
                   <aon-icon name="note" [size]="16" />{{ i18n.t('order.noteMode') }}
@@ -230,6 +242,13 @@ type NoteMode = 'NOTE' | 'ISSUE';
                             <span class="block font-semibold">{{ i18n.t('order.logQuantity', { q: i18n.number(l.quantity ?? 0), unit: unitLabel() }) }}</span>
                           }
                         }
+                        @case ('MATERIAL') {
+                          @if ((l.quantity ?? 0) < 0) {
+                            <span class="block font-semibold">{{ i18n.t('mat.logFix', { name: l.materialName ?? '', q: i18n.number(-(l.quantity ?? 0)), unit: l.materialUnit ?? '' }) }}</span>
+                          } @else {
+                            <span class="block font-semibold">{{ i18n.t('mat.logAdd', { name: l.materialName ?? '', q: i18n.number(l.quantity ?? 0), unit: l.materialUnit ?? '' }) }}</span>
+                          }
+                        }
                         @case ('ISSUE') {
                           <span class="log-kind is-bad">{{ i18n.t('order.logIssue') }}</span>
                         }
@@ -244,7 +263,7 @@ type NoteMode = 'NOTE' | 'ISSUE';
                   </li>
                 }
               </ol>
-            } @else {
+            } @else if (canLog()) {
               <p class="w-small w-muted mt-3">{{ i18n.t('order.timelineEmpty') }}</p>
             }
           </section>
@@ -267,17 +286,6 @@ type NoteMode = 'NOTE' | 'ISSUE';
             <div class="w-rows mt-3">
               <p class="w-row"><span class="w-muted">{{ i18n.t('order.manager') }}</span><span class="font-semibold">{{ o.managerName }}</span></p>
             </div>
-            @if (o.materials.length) {
-              <h3 class="w-small w-muted mt-3">{{ i18n.t('order.materials') }}</h3>
-              <ul class="w-rows mt-1">
-                @for (m of o.materials; track $index) {
-                  <li class="w-row">
-                    <span>{{ m.name }}</span>
-                    <span class="font-semibold tabular-nums">{{ m.qty !== null ? i18n.number(m.qty) + ' ' + (m.unit ?? '') : i18n.t('common.none') }}</span>
-                  </li>
-                }
-              </ul>
-            }
           </section>
         </div>
       } @else {
@@ -290,6 +298,9 @@ type NoteMode = 'NOTE' | 'ISSUE';
   styles: `
     :host {
       display: block;
+    }
+    .back {
+      margin-bottom: 0.75rem;
     }
     .no-label {
       color: var(--color-text-muted);
@@ -430,7 +441,7 @@ type NoteMode = 'NOTE' | 'ISSUE';
       border-radius: 9999px;
       background: var(--color-gold);
       color: var(--color-charcoal);
-      touch-action: none;
+      touch-action: pan-y;
       user-select: none;
     }
     .slide.is-dark {
@@ -524,6 +535,9 @@ export class OrderDetailComponent {
 
   protected readonly order = computed(() => this.store.orders().find((o) => o.id === this.id()) ?? null);
   protected readonly running = computed(() => this.store.activeSegment()?.workOrderId === this.id());
+  /** Until the worker starts the order it is read-only: nothing can be written on it, or finished. */
+  protected readonly canLog = computed(() => this.running() && this.order()?.status !== 'COMPLETED' && !this.store.dayClosed());
+  protected readonly waitingForStart = computed(() => !this.running() && this.order()?.status !== 'COMPLETED' && !this.store.dayClosed());
   protected readonly canFinish = computed(() => {
     const o = this.order();
     return !!o && this.store.canTransition(o.status, 'COMPLETED');
@@ -544,11 +558,15 @@ export class OrderDetailComponent {
   protected readonly unitLabel = computed(() => this.i18n.t(`unit.${this.order()?.unit ?? 'PCS'}`));
 
   // ---- order actions
-  /** Finishing is offered once there is something to finish: time on the order, a quantity, or a running timer. */
+  /** Planned materials with nothing logged yet: finishing is still allowed, but the worker is reminded. */
+  protected readonly materialsUnlogged = computed(() => {
+    const o = this.order();
+    return o ? materialLines(o).filter((m) => !m.extra && m.used === 0).length : 0;
+  });
+
   protected readonly canFinishNow = computed(() => {
     const o = this.order();
-    if (!o || !this.canFinish()) return false;
-    return this.running() || o.doneQty > 0 || orderElapsedMs(this.store.dayEntries(), this.id(), this.clock.now()) > 0;
+    return !!o && this.canFinish() && this.running();
   });
   protected readonly primaryLabel = computed(() => {
     const o = this.order();

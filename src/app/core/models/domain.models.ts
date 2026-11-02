@@ -77,6 +77,51 @@ export interface Material {
   readonly unit: string | null;
 }
 
+/** How much of one material a whole crew has used on an order so far. */
+export interface MaterialUsage {
+  readonly name: string;
+  readonly unit: string | null;
+  readonly qty: number;
+}
+
+/** One line of an order's materials as people read it: the plan, what was used, and whether it was planned at all. */
+export interface MaterialLine {
+  readonly key: string;
+  readonly name: string;
+  readonly unit: string | null;
+  /** Null when the plan gives no amount, or the material was not on the order. */
+  readonly planned: number | null;
+  readonly used: number;
+  readonly extra: boolean;
+}
+
+/** Names match whatever their case or spacing, so "Vijaki " and "vijaki" stay one line. */
+export function materialKey(name: string): string {
+  return name.trim().toLocaleLowerCase();
+}
+
+/** The planned materials in the manager's order, then anything the crew added. */
+export function materialLines(order: { readonly materials: readonly Material[]; readonly materialUsage?: readonly MaterialUsage[] }): MaterialLine[] {
+  const usage = order.materialUsage ?? [];
+  const planned = order.materials.map((m) => {
+    const key = materialKey(m.name);
+    return { key, name: m.name, unit: m.unit, planned: m.qty, used: usage.find((u) => materialKey(u.name) === key)?.qty ?? 0, extra: false };
+  });
+  const known = new Set(planned.map((p) => p.key));
+  const extra = usage.filter((u) => !known.has(materialKey(u.name))).map((u) => ({ key: materialKey(u.name), name: u.name, unit: u.unit, planned: null, used: u.qty, extra: true }));
+  return [...planned, ...extra];
+}
+
+/** The running totals after one entry. Returns null when a correction would take a material below zero. */
+export function applyMaterialUsage(usage: readonly MaterialUsage[], name: string, unit: string | null, delta: number): MaterialUsage[] | null {
+  const key = materialKey(name);
+  const current = usage.find((u) => materialKey(u.name) === key);
+  const qty = Math.round(((current?.qty ?? 0) + delta) * 100) / 100;
+  if (qty < 0) return null;
+  const rest = usage.filter((u) => u !== current);
+  return qty === 0 ? rest : [...rest, { name: current?.name ?? name.trim(), unit: current?.unit ?? unit, qty }];
+}
+
 export interface WorkOrder {
   readonly id: string;
   /** Server-issued number, e.g. `2026-00125`. Null until the server has accepted a new order. */
@@ -99,7 +144,10 @@ export interface WorkOrder {
   readonly plannedQty: number;
   readonly doneQty: number;
   readonly estimatedMinutes: number | null;
+  /** The plan: what the crew should need. Amounts are optional. */
   readonly materials: readonly Material[];
+  /** What the crew has used so far, across every day and worker. */
+  readonly materialUsage: readonly MaterialUsage[];
   readonly date: IsoDate | null;
   readonly dueDate: IsoDate | null;
   readonly updatedAt: EpochMs;
@@ -130,15 +178,18 @@ export interface TimeEntry {
   readonly endNote?: string | null;
 }
 
-export type LogEntryKind = 'QUANTITY' | 'NOTE' | 'ISSUE';
+export type LogEntryKind = 'QUANTITY' | 'MATERIAL' | 'NOTE' | 'ISSUE';
 
 export interface LogEntry {
   readonly id: string;
   readonly userId: string;
   readonly workOrderId: string;
   readonly kind: LogEntryKind;
-  /** Quantity delta for QUANTITY entries, in the order's unit. */
+  /** Delta for QUANTITY entries in the order's unit, for MATERIAL entries in the material's unit. */
   readonly quantity: number | null;
+  /** Which material a MATERIAL entry is about. */
+  readonly materialName?: string | null;
+  readonly materialUnit?: string | null;
   readonly text: string | null;
   readonly createdAt: EpochMs;
 }

@@ -43,19 +43,19 @@ function startingPassword(): string {
   imports: [IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="pp px-4 pb-12 pt-5 sm:px-6 lg:px-8 lg:pt-7">
+    <div class="pp m-page pb-12">
       <header class="pp-head">
         <div>
-          <h1 class="pp-title">{{ i18n.t('people.title') }}</h1>
+          <h1 class="m-title">{{ i18n.t('people.title') }}</h1>
           @if (ready(); as r) {
             <p class="pp-sub">{{ i18n.t('people.subtitle', { n: activeCount(), m: r.users.length - activeCount() }) }}</p>
           }
         </div>
         <div class="pp-actions">
-          <button type="button" class="pp-quiet" [disabled]="state().kind === 'LOADING'" (click)="load()" [attr.aria-label]="i18n.t('mgr.refresh')">
+          <button type="button" class="m-btn m-btn-line m-btn-icon" [disabled]="state().kind === 'LOADING'" (click)="load()" [attr.aria-label]="i18n.t('mgr.refresh')">
             <aon-icon name="refresh" [size]="16" [class.animate-spin]="state().kind === 'LOADING'" />
           </button>
-          <button type="button" class="pp-gold" [disabled]="creating()" (click)="openCreate()">
+          <button type="button" class="m-btn m-btn-gold" [disabled]="creating()" (click)="openCreate()">
             <aon-icon name="user-plus" [size]="17" />{{ i18n.t('people.new') }}
           </button>
         </div>
@@ -93,7 +93,7 @@ function startingPassword(): string {
               <span>{{ i18n.t('people.password') }}</span>
               <span class="pp-pass">
                 <input type="text" maxlength="200" autocomplete="off" spellcheck="false" [value]="fPassword()" (input)="fPassword.set($any($event.target).value)" />
-                <button type="button" class="pp-quiet" (click)="fPassword.set(newPassword())" [attr.aria-label]="i18n.t('people.generate')" [title]="i18n.t('people.generate')">
+                <button type="button" class="m-btn m-btn-line" (click)="fPassword.set(newPassword())" [attr.aria-label]="i18n.t('people.generate')" [title]="i18n.t('people.generate')">
                   <aon-icon name="refresh" [size]="15" />
                 </button>
               </span>
@@ -114,8 +114,8 @@ function startingPassword(): string {
             <p class="pp-error" role="alert"><aon-icon name="alert" [size]="17" />{{ err }}</p>
           }
           <div class="pp-foot">
-            <button type="submit" class="pp-dark" [disabled]="saving()">{{ saving() ? i18n.t('projects.saving') : i18n.t('people.create') }}</button>
-            <button type="button" class="pp-quiet" (click)="creating.set(false)">{{ i18n.t('common.cancel') }}</button>
+            <button type="submit" class="m-btn m-btn-dark" [disabled]="saving()">{{ saving() ? i18n.t('projects.saving') : i18n.t('people.create') }}</button>
+            <button type="button" class="m-btn m-btn-line" (click)="creating.set(false)">{{ i18n.t('common.cancel') }}</button>
           </div>
         </form>
       }
@@ -128,7 +128,7 @@ function startingPassword(): string {
             <span class="pp-cred"><span>{{ i18n.t('people.username') }}</span><b>{{ h.username }}</b></span>
             <span class="pp-cred"><span>{{ i18n.t('people.password') }}</span><b>{{ h.password }}</b></span>
           </p>
-          <button type="button" class="pp-quiet" (click)="handoff.set(null)">{{ i18n.t('common.close') }}</button>
+          <button type="button" class="m-btn m-btn-line" (click)="handoff.set(null)">{{ i18n.t('common.close') }}</button>
         </div>
       }
 
@@ -138,7 +138,7 @@ function startingPassword(): string {
             <button type="button" class="flt-btn" [attr.aria-pressed]="filter() === f.key" (click)="filter.set(f.key)">{{ i18n.t(f.label) }}<span class="flt-n">{{ f.count }}</span></button>
           }
         </div>
-        <label class="pp-search">
+        <label class="m-search pp-search">
           <span class="sr-only">{{ i18n.t('people.search') }}</span>
           <aon-icon name="search" [size]="16" />
           <input type="search" [placeholder]="i18n.t('people.search')" [value]="query()" (input)="query.set($any($event.target).value)" />
@@ -161,7 +161,7 @@ function startingPassword(): string {
         @case ('ERROR') {
           <p class="pp-error" role="alert">
             <aon-icon name="alert" [size]="17" />{{ i18n.t('people.loadFailed') }}
-            <button type="button" class="pp-quiet" (click)="load()">{{ i18n.t('common.retry') }}</button>
+            <button type="button" class="m-btn m-btn-line" (click)="load()">{{ i18n.t('common.retry') }}</button>
           </p>
         }
         @default {
@@ -190,7 +190,7 @@ function startingPassword(): string {
                       <span class="pp-dot" aria-hidden="true"></span>{{ i18n.t(u.active ? 'people.active' : 'people.inactive') }}
                     </span>
                     <span class="pp-act">
-                      <button type="button" class="pp-quiet" [attr.aria-expanded]="editId() === u.id" (click)="toggleEdit(u)">
+                      <button type="button" class="m-btn m-btn-line" [attr.aria-expanded]="editId() === u.id" (click)="toggleEdit(u)">
                         <aon-icon name="pencil" [size]="15" />{{ i18n.t('people.edit') }}
                       </button>
                     </span>
@@ -226,8 +226,8 @@ function startingPassword(): string {
                         <p class="pp-error" role="alert"><aon-icon name="alert" [size]="17" />{{ err }}</p>
                       }
                       <div class="pp-foot">
-                        <button type="submit" class="pp-dark" [disabled]="saving()">{{ saving() ? i18n.t('projects.saving') : i18n.t('common.save') }}</button>
-                        <button type="button" class="pp-quiet" (click)="editId.set(null)">{{ i18n.t('common.cancel') }}</button>
+                        <button type="submit" class="m-btn m-btn-dark" [disabled]="saving()">{{ saving() ? i18n.t('projects.saving') : i18n.t('common.save') }}</button>
+                        <button type="button" class="m-btn m-btn-line" (click)="editId.set(null)">{{ i18n.t('common.cancel') }}</button>
                       </div>
 
                       <div class="pp-more">
@@ -236,22 +236,22 @@ function startingPassword(): string {
                             <span>{{ i18n.t('people.newPassword') }}</span>
                             <span class="pp-pass">
                               <input type="text" maxlength="200" autocomplete="off" spellcheck="false" [value]="ePassword()" (input)="ePassword.set($any($event.target).value)" />
-                              <button type="button" class="pp-quiet" (click)="ePassword.set(newPassword())" [attr.aria-label]="i18n.t('people.generate')" [title]="i18n.t('people.generate')">
+                              <button type="button" class="m-btn m-btn-line" (click)="ePassword.set(newPassword())" [attr.aria-label]="i18n.t('people.generate')" [title]="i18n.t('people.generate')">
                                 <aon-icon name="refresh" [size]="15" />
                               </button>
                             </span>
                           </label>
-                          <button type="button" class="pp-quiet" [disabled]="saving() || !ePassword()" (click)="resetPassword(u)">
+                          <button type="button" class="m-btn m-btn-line" [disabled]="saving() || !ePassword()" (click)="resetPassword(u)">
                             <aon-icon name="key" [size]="15" />{{ i18n.t('people.setPassword') }}
                           </button>
                         </div>
                         @if (u.id !== meId()) {
                           @if (u.active) {
-                            <button type="button" class="pp-bad" [disabled]="saving()" (click)="setActive(u, false)">
+                            <button type="button" class="m-btn m-btn-danger" [disabled]="saving()" (click)="setActive(u, false)">
                               <aon-icon name="user-x" [size]="15" />{{ i18n.t(confirmOff() ? 'people.deactivateConfirm' : 'people.deactivate') }}
                             </button>
                           } @else {
-                            <button type="button" class="pp-quiet" [disabled]="saving()" (click)="setActive(u, true)">
+                            <button type="button" class="m-btn m-btn-line" [disabled]="saving()" (click)="setActive(u, true)">
                               <aon-icon name="user-check" [size]="15" />{{ i18n.t('people.activate') }}
                             </button>
                           }
@@ -281,12 +281,6 @@ function startingPassword(): string {
       justify-content: space-between;
       gap: 0.75rem 1.5rem;
     }
-    .pp-title {
-      font-size: clamp(1.6rem, 1.3rem + 1.2vw, 2.09rem);
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      line-height: 1.15;
-    }
     .pp-sub {
       margin-top: 0.3rem;
       color: var(--color-text-muted);
@@ -300,55 +294,6 @@ function startingPassword(): string {
     }
     .pp-foot {
       margin-top: 1rem;
-    }
-    .pp-quiet,
-    .pp-gold,
-    .pp-dark,
-    .pp-bad {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.4rem;
-      min-width: 2.6rem;
-      min-height: 2.6rem;
-      padding: 0 0.8rem;
-      border-radius: 0.5rem;
-      font-weight: 500;
-      white-space: nowrap;
-      transition: background-color 150ms ease-out;
-    }
-    .pp-quiet {
-      border: 1px solid var(--color-line-strong);
-      background: var(--color-panel);
-      color: var(--color-text);
-    }
-    .pp-quiet:hover:not(:disabled) {
-      background: var(--color-field);
-    }
-    .pp-gold {
-      padding: 0 1rem;
-      background: var(--color-gold);
-      color: var(--color-charcoal);
-      font-weight: 600;
-      box-shadow: 0 1px 2px rgb(20 20 20 / 0.12), inset 0 -2px 0 rgb(0 0 0 / 0.08);
-    }
-    .pp-gold:hover:not(:disabled) {
-      filter: brightness(1.04);
-    }
-    .pp-dark {
-      padding: 0 1.05rem;
-      background: var(--color-rail);
-      color: #fff;
-      font-weight: 600;
-    }
-    .pp-dark:hover:not(:disabled) {
-      background: var(--color-charcoal);
-    }
-    .pp-bad {
-      color: var(--color-bad-ink);
-    }
-    .pp-bad:hover:not(:disabled) {
-      background: var(--color-bad-tint);
     }
     button:disabled {
       opacity: 0.55;
@@ -569,29 +514,8 @@ function startingPassword(): string {
       margin: 1.25rem 0 0.75rem;
     }
     .pp-search {
-      display: flex;
       flex: 1 1 14rem;
-      align-items: center;
-      gap: 0.5rem;
       max-width: 22rem;
-      min-height: 2.6rem;
-      padding: 0 0.75rem;
-      border: 1px solid var(--color-line-strong);
-      border-radius: 0.5rem;
-      background: var(--color-panel);
-      color: var(--color-text-muted);
-    }
-    .pp-search:focus-within {
-      border-color: var(--color-gold);
-      box-shadow: 0 0 0 3px rgb(193 160 80 / 0.25);
-    }
-    .pp-search input {
-      width: 100%;
-      min-width: 0;
-      border: 0;
-      background: transparent;
-      color: var(--color-text);
-      outline: none;
     }
     .pp-check {
       display: inline-flex;
@@ -793,6 +717,9 @@ function startingPassword(): string {
 
     /* Phones and narrow tablets: each account becomes a stacked card. */
     @media (max-width: 860px) {
+      .pp-search {
+        max-width: none;
+      }
       .pp-th {
         display: none;
       }

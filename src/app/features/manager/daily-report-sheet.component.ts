@@ -26,13 +26,13 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
   template: `
     <div class="bar no-print">
       <div class="bar-l">
-        <a [routerLink]="['/m']" [queryParams]="{ report: id() }" class="back" [attr.aria-label]="i18n.t('common.back')"><aon-icon name="arrow-left" [size]="20" [stroke]="2.2" /></a>
+        <a [routerLink]="['/m']" [queryParams]="{ report: id() }" class="m-back" [attr.aria-label]="i18n.t('common.back')"><aon-icon name="arrow-left" [size]="20" [stroke]="2.2" /></a>
         <div class="min-w-0">
           <h1 class="bar-title">{{ i18n.t('pdf.preview') }}</h1>
           <p class="bar-sub">{{ i18n.t('pdf.hint') }}</p>
         </div>
       </div>
-      <button type="button" class="print" [disabled]="state().kind !== 'READY'" (click)="print()"><aon-icon name="printer" [size]="18" />{{ i18n.t('pdf.print') }}</button>
+      <button type="button" class="m-btn m-btn-gold" [disabled]="state().kind !== 'READY'" (click)="print()"><aon-icon name="printer" [size]="18" />{{ i18n.t('pdf.print') }}</button>
     </div>
 
     <div class="stage">
@@ -249,17 +249,6 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
       gap: 0.75rem;
       min-width: 0;
     }
-    .back {
-      display: grid;
-      flex-shrink: 0;
-      place-items: center;
-      width: 2.75rem;
-      height: 2.75rem;
-      border: 1px solid var(--color-line-strong);
-      border-radius: 0.6rem;
-      background: var(--color-panel);
-      color: var(--color-text);
-    }
     .bar-title {
       font-size: 1.15rem;
       font-weight: 650;
@@ -269,19 +258,11 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
       color: var(--color-text-muted);
       font-size: 0.85rem;
     }
-    .print {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.45rem;
-      min-height: 2.9rem;
-      padding: 0 1.1rem;
-      border-radius: 0.6rem;
-      background: var(--color-gold);
-      color: var(--color-charcoal);
-      font-weight: 650;
-    }
-    .print:disabled {
-      opacity: 0.5;
+    /* Under the phone's top bar: tablets keep the toolbar in view, phones give the height back to the sheet. */
+    @media (max-width: 900px) {
+      .bar {
+        top: 3.5rem;
+      }
     }
     .stage {
       padding: 1.5rem 1rem 3rem;
@@ -628,6 +609,7 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
     }
     @media (max-width: 700px) {
       .bar {
+        position: static;
         padding: 0.6rem 0.9rem;
       }
       .bar-sub {

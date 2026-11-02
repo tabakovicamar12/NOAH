@@ -40,7 +40,7 @@ import { IconComponent } from './icon.component';
         } @else {
           <span class="net-dot"></span>
         }
-        <span class="net-text">{{ stateLabel() }} · {{ i18n.t('net.waiting', { n: sync.unsyncedCount() }) }}</span>
+        <span class="net-text">{{ stateLabel() }}<span [class.net-idle]="sync.unsyncedCount() === 0"> · {{ i18n.t('net.waiting', { n: sync.unsyncedCount() }) }}</span></span>
       </button>
     } @else {
     <button
@@ -246,6 +246,12 @@ import { IconComponent } from './icon.component';
       transition: background-color 160ms var(--ease-out-expo);
     }
     /* The field bar's quiet form: the same status, no box; it keeps a glove-sized hit area. */
+    /* The narrowest phones: "0 waiting" gives way so the state reads whole. A real count always stays. */
+    @media (max-width: 359px) {
+      .net-idle {
+        display: none;
+      }
+    }
     .net-pill.is-line {
       min-height: 2.75rem;
       padding: 0 0.4rem;

@@ -101,6 +101,23 @@ async function main(): Promise<void> {
   check('the total reflects the correction', after.body?.order?.doneQty === 1, String(after.body?.order?.doneQty));
   check('both entries stay in the history', (after.body?.logs ?? []).filter((l: { kind: string }) => l.kind === 'QUANTITY').length === 2);
 
+  // Materials: several per order, a running total, corrections that keep the history
+  const useMaterial = (orderId: string, name: string, quantity: number, text: string | null): Promise<{ status: number }> =>
+    call('POST', '/logs', worker, { id: crypto.randomUUID(), userId: 'u-w', workOrderId: orderId, kind: 'MATERIAL', materialName: name, materialUnit: 'kos', quantity, text, createdAt: Date.now() });
+  check('material can be logged', (await useMaterial(o1.id, 'Vijaki', 10, null)).status === 204);
+  check('a second material on one order is accepted', (await useMaterial(o1.id, 'Letve', 3, null)).status === 204);
+  check('entries for one material add up, whatever the case', (await useMaterial(o1.id, 'vijaki ', 5, null)).status === 204);
+  check('material works on an order without a quantity', (await useMaterial(task.id, 'Silikon', 1, null)).status === 204);
+  check('a material correction needs a reason', (await useMaterial(o1.id, 'Vijaki', -2, null)).status === 400);
+  check('a material correction with a reason is accepted', (await useMaterial(o1.id, 'Vijaki', -2, 'Preštel napačno')).status === 204);
+  check('a material correction below zero is rejected', (await useMaterial(o1.id, 'Letve', -4, 'preveč')).status === 409);
+  check('a material log without a name is rejected', (await useMaterial(o1.id, '  ', 1, null)).status === 400);
+  const used = await call('GET', `/manager/work-orders/${o1.id}`, admin);
+  const usage = (used.body?.order?.materialUsage ?? []) as { name: string; qty: number }[];
+  check('the order keeps a total per material', usage.find((u) => u.name === 'Vijaki')?.qty === 13 && usage.find((u) => u.name === 'Letve')?.qty === 3, JSON.stringify(usage));
+  check('material entries stay in the history', (used.body?.logs ?? []).filter((l: { kind: string }) => l.kind === 'MATERIAL').length === 4);
+  check('material entries do not change the work done', used.body?.order?.doneQty === 1);
+
   // Working time
   const hours = await call('GET', `/worker/hours?month=${year}-01`, worker);
   check('a worker reads their own hours', hours.status === 200 && hours.body?.workers?.length === 1);

@@ -543,8 +543,8 @@ interface NavItem {
         display: grid;
         place-items: center;
         order: -1;
-        width: 2.75rem;
-        height: 2.75rem;
+        width: var(--m-tap);
+        height: var(--m-tap);
         border-radius: 0.5rem;
         color: #fff;
       }
@@ -580,6 +580,10 @@ interface NavItem {
       .me-avatar {
         width: 2.2rem;
         height: 2.2rem;
+      }
+      .me-menu {
+        width: var(--m-tap);
+        height: var(--m-tap);
       }
       .account {
         left: auto;

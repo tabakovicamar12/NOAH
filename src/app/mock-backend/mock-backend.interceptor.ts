@@ -45,6 +45,7 @@ import {
   type WorkOrder,
   type WorkOrderStatus,
 } from '../core/models/domain.models';
+import { applyMaterialUsage } from '../core/models/domain.models';
 import { compareCodes, isIsoDate, minutesBetween, toIsoDate } from '../core/util/util';
 import { isMonth, monthOf, monthWindow } from '../core/worktime/worktime';
 import { houseModel } from '../core/models/house-catalog';
@@ -282,6 +283,7 @@ async function upsertOrder(db: MockServerDb, me: MockUser, id: string, body: Wor
     unit: body.unit,
     plannedQty,
     doneQty: existing?.doneQty ?? 0,
+    materialUsage: existing?.materialUsage ?? [],
     estimatedMinutes: body.estimatedMinutes === null ? null : Math.max(0, Math.round(requireNumber(body.estimatedMinutes, 'estimatedMinutes'))),
     materials: (body.materials ?? [])
       .filter((m) => typeof m?.name === 'string' && m.name.trim() !== '')
@@ -424,7 +426,16 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
       if (body.userId !== me.id) throw new MockHttpError(403, 'Not your entry');
       const target = await db.orders.get(requireString(body.workOrderId, 'workOrderId'));
       if (!target) throw new MockHttpError(404, 'Work order not found');
-      if (body.kind === 'QUANTITY') {
+      if (body.kind === 'MATERIAL') {
+        const name = requireString(body.materialName, 'materialName').trim();
+        if (!name) throw new MockHttpError(400, 'materialName required');
+        const q = requireNumber(body.quantity, 'quantity');
+        if (q === 0) throw new MockHttpError(400, 'quantity must not be zero');
+        if (q < 0 && !(typeof body.text === 'string' && body.text.trim())) throw new MockHttpError(400, 'A correction needs a reason');
+        const next = applyMaterialUsage(target.materialUsage ?? [], name, body.materialUnit ?? null, q);
+        if (!next) throw new MockHttpError(409, 'MATERIAL_BELOW_ZERO');
+        await db.orders.put({ ...target, materialUsage: next, updatedAt: Date.now() });
+      } else if (body.kind === 'QUANTITY') {
         if (target.plannedQty === 0) throw new MockHttpError(409, 'NO_QUANTITY');
         const q = requireNumber(body.quantity, 'quantity');
         if (q === 0) throw new MockHttpError(400, 'quantity must not be zero');

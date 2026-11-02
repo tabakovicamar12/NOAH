@@ -3,7 +3,7 @@ import { Router, RouterLink } from '@angular/router';
 import { SessionStore } from '../../core/auth/session.store';
 import { I18nService } from '../../core/i18n/i18n.service';
 import type { TranslationKey } from '../../core/i18n/sl';
-import { QUANTITY_UNITS, hasQuantity, type IsoDate, type Material, type QuantityUnit, type WorkOrder, type WorkOrderStatus } from '../../core/models/domain.models';
+import { QUANTITY_UNITS, hasQuantity, materialKey, type IsoDate, type Material, type QuantityUnit, type WorkOrder, type WorkOrderStatus } from '../../core/models/domain.models';
 import { NetworkStatusService } from '../../core/network/network-status.service';
 import { ToastService } from '../../core/ui/toast.service';
 import { isIsoDate, toIsoDate, uuid } from '../../core/util/util';
@@ -30,13 +30,13 @@ interface MaterialRow {
   imports: [RouterLink, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="px-4 pb-32 pt-5 sm:px-6 lg:px-8 lg:pt-7">
+    <div class="m-page pb-32">
       <header class="flex flex-wrap items-center gap-3">
-        <a routerLink="/m" class="grid size-12 shrink-0 place-items-center border-2 border-charcoal bg-stock text-ink" [attr.aria-label]="i18n.t('common.back')">
-          <aon-icon name="arrow-left" [size]="22" [stroke]="2.5" />
+        <a routerLink="/m" class="m-back" [attr.aria-label]="i18n.t('common.back')">
+          <aon-icon name="arrow-left" [size]="20" [stroke]="2.2" />
         </a>
         <div class="min-w-0">
-          <h1 class="font-cond-tight text-[2.25rem] leading-none sm:text-5xl">{{ i18n.t(heading()) }}</h1>
+          <h1 class="m-title">{{ i18n.t(heading()) }}</h1>
           @if (sourceCode()) {
             <p class="mt-1 font-semibold text-ink-muted">{{ i18n.t(mode() === 'duplicate' ? 'form.copyOf' : 'form.editing', { code: sourceCode() ?? '' }) }}</p>
           }
@@ -316,14 +316,25 @@ interface MaterialRow {
           <!-- Materials -->
           <fieldset class="grid gap-3">
             <legend class="w-full border-b-2 border-charcoal pb-1 font-cond text-2xl">{{ i18n.t('order.materials') }}</legend>
+            <p class="text-[0.95rem] text-ink-muted">{{ i18n.t('form.materialsHint') }}</p>
             @if (materials().length) {
+              <div class="mat-head grid grid-cols-[minmax(0,1fr)_4.5rem_3.75rem_3rem] gap-1.5 sm:grid-cols-[minmax(0,1fr)_6rem_5rem_3rem] sm:gap-2" aria-hidden="true">
+                <span>{{ i18n.t('form.materialName') }}</span>
+                <span class="text-right">{{ i18n.t('form.materialPlan') }}</span>
+                <span class="text-center">{{ i18n.t('form.materialUnit') }}</span>
+              </div>
+              <datalist id="material-units">
+                @for (u of materialUnits; track u) {
+                  <option [value]="u"></option>
+                }
+              </datalist>
               <ul class="grid gap-2">
                 @for (m of materials(); track m.key; let i = $index) {
                   <li class="grid grid-cols-[minmax(0,1fr)_4.5rem_3.75rem_3rem] gap-1.5 sm:grid-cols-[minmax(0,1fr)_6rem_5rem_3rem] sm:gap-2">
-                    <input type="text" maxlength="80" class="field" [attr.aria-label]="i18n.t('form.materialName')" [placeholder]="i18n.t('form.materialPlaceholder')" [value]="m.name" (input)="setMaterial(i, { name: $any($event.target).value })" />
+                    <input type="text" maxlength="80" class="field" [attr.aria-label]="i18n.t('form.materialName')" [placeholder]="i18n.t('form.materialPlaceholder')" [value]="m.name" [readOnly]="usedOf(m.name) > 0" [title]="usedOf(m.name) > 0 ? i18n.t('form.materialLocked') : ''" (input)="setMaterial(i, { name: $any($event.target).value })" />
                     <input type="number" inputmode="decimal" min="0" step="any" class="field text-right font-cond text-xl" [attr.aria-label]="i18n.t('form.materialQty', { name: m.name })" [value]="m.qty" (input)="setMaterial(i, { qty: $any($event.target).value })" />
-                    <input type="text" maxlength="12" class="field text-center" [attr.aria-label]="i18n.t('form.materialUnit')" [placeholder]="i18n.t('unit.PCS')" [value]="m.unit" (input)="setMaterial(i, { unit: $any($event.target).value })" />
-                    <button type="button" class="grid min-h-12 place-items-center ring-2 ring-inset ring-charcoal hover:bg-ground-deep" [attr.aria-label]="i18n.t('form.removeMaterial', { name: m.name })" (click)="removeMaterial(i)">
+                    <input type="text" maxlength="12" list="material-units" class="field text-center" [attr.aria-label]="i18n.t('form.materialUnit')" [placeholder]="i18n.t('unit.PCS')" [value]="m.unit" (input)="setMaterial(i, { unit: $any($event.target).value })" />
+                    <button type="button" class="grid min-h-12 place-items-center ring-2 ring-inset ring-charcoal hover:bg-ground-deep disabled:opacity-40" [attr.aria-label]="i18n.t('form.removeMaterial', { name: m.name })" [disabled]="usedOf(m.name) > 0" [title]="usedOf(m.name) > 0 ? i18n.t('form.materialLocked') : ''" (click)="removeMaterial(i)">
                       <aon-icon name="x" [size]="20" />
                     </button>
                   </li>
@@ -342,14 +353,14 @@ interface MaterialRow {
 
     <!-- Action bar -->
     <div class="form-bar fixed inset-x-0 bottom-0 z-40 border-t border-[var(--color-line)] bg-[var(--color-site)]">
-      <div class="flex flex-wrap items-center justify-end gap-2 px-4 py-3 sm:px-6 lg:px-8">
+      <div class="form-acts flex flex-wrap items-center justify-end gap-2 py-3">
         <p class="mr-auto hidden text-sm font-semibold text-ink-muted sm:block">{{ i18n.t('form.queueNote') }}</p>
         @if (!isPublished()) {
-          <button type="button" class="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--color-line-strong)] bg-white px-4 font-semibold hover:bg-[var(--color-field)] disabled:opacity-50" [disabled]="busy()" (click)="save(false)">
+          <button type="button" class="m-btn m-btn-line form-act" [disabled]="busy()" (click)="save(false)">
             <aon-icon name="note" [size]="20" />{{ i18n.t('form.saveDraft') }}
           </button>
         }
-        <button type="button" class="flex min-h-11 items-center gap-2 rounded-lg bg-gold px-5 font-semibold text-charcoal shadow-sm hover:brightness-105 disabled:opacity-50" [disabled]="busy()" (click)="save(true)">
+        <button type="button" class="m-btn m-btn-gold form-act" [disabled]="busy()" (click)="save(true)">
           <aon-icon name="check" [size]="20" [stroke]="2.5" />{{ isPublished() ? i18n.t('form.saveChanges') : i18n.t('form.assign') }}
         </button>
       </div>
@@ -360,6 +371,20 @@ interface MaterialRow {
     @media (min-width: 901px) {
       .form-bar {
         left: var(--side-w, 16.9rem);
+      }
+    }
+    .mat-head {
+      color: var(--color-text-muted);
+      font-size: 0.85rem;
+    }
+    .form-acts {
+      padding-inline: var(--m-gutter);
+      padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    }
+    /* Phones: the two commands share the thumb row evenly. */
+    @media (max-width: 600px) {
+      .form-act {
+        flex: 1 1 0;
       }
     }
     select.field {
@@ -464,6 +489,7 @@ export class OrderFormComponent {
   readonly site = input<string | undefined>(undefined);
 
   protected readonly units = QUANTITY_UNITS;
+  protected readonly materialUnits = ['kos', 'm', 'm²', 'm³', 'kg', 't', 'l', 'kpl', 'pak'];
 
   protected readonly projectId = signal('');
   protected readonly siteId = signal('');
@@ -476,7 +502,7 @@ export class OrderFormComponent {
   protected readonly dueDate = signal<string>('');
   protected readonly plannedQty = signal<string>('');
   /** False for a task without a quantity (an inspection, a handover): saved with a plan of 0. */
-  protected readonly measured = signal(true);
+  protected readonly measured = signal(false);
   protected readonly unit = signal<QuantityUnit>('PCS');
   protected readonly estimateHours = signal<string>('');
   protected readonly materials = signal<readonly MaterialRow[]>([]);
@@ -618,6 +644,13 @@ export class OrderFormComponent {
     if (!on) this.crewMissing.set(false);
   }
 
+  /** Material the crew has already logged keeps its name and stays on the order, so the record still adds up. */
+  protected usedOf(name: string): number {
+    if (this.mode() !== 'edit') return 0;
+    const key = materialKey(name);
+    return (this.source()?.materialUsage ?? []).find((u) => materialKey(u.name) === key)?.qty ?? 0;
+  }
+
   protected addMaterial(): void {
     this.materials.update((list) => [...list, { key: this.materialKey++, name: '', qty: '', unit: '' }]);
   }
@@ -698,6 +731,7 @@ export class OrderFormComponent {
         doneQty: 0,
         estimatedMinutes: pending.estimatedMinutes,
         materials: pending.materials,
+        materialUsage: [],
         date: pending.date,
         dueDate: pending.dueDate,
         updatedAt: pending.savedAt,

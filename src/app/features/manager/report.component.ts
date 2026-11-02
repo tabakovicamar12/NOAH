@@ -11,6 +11,7 @@ import { compareCodes, isIsoDate, toIsoDate } from '../../core/util/util';
 import { WORKTIME_RULES, addDays, hm } from '../../core/worktime/worktime';
 import { IconComponent } from '../../shared/ui/icon.component';
 import { LogoComponent } from '../../shared/ui/logo.component';
+import { PeriodNavComponent } from '../../shared/ui/period-nav.component';
 import { ManagerStore } from './data/manager-store.service';
 
 interface IssueLine {
@@ -31,24 +32,31 @@ const R = WORKTIME_RULES;
  */
 @Component({
   selector: 'aon-manager-report',
-  imports: [RouterLink, IconComponent, LogoComponent],
+  imports: [RouterLink, IconComponent, LogoComponent, PeriodNavComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="bar no-print">
       <div class="bar-l">
-        <a routerLink="/m" class="back" [attr.aria-label]="i18n.t('common.back')"><aon-icon name="arrow-left" [size]="20" [stroke]="2.2" /></a>
+        <a routerLink="/m" class="m-back" [attr.aria-label]="i18n.t('common.back')"><aon-icon name="arrow-left" [size]="20" [stroke]="2.2" /></a>
         <div class="min-w-0">
           <h1 class="bar-title">{{ i18n.t('pdf.preview') }}</h1>
           <p class="bar-sub">{{ i18n.t('pdf.hint') }}</p>
         </div>
       </div>
       <div class="bar-r">
-        <div class="month" role="group" [attr.aria-label]="i18n.t('pdf.date')">
-          <button type="button" class="mbtn" [attr.aria-label]="i18n.t('mgr.prevPage')" (click)="step(-1)"><aon-icon name="chevron-left" [size]="18" /></button>
-          <span class="mlabel">{{ i18n.date(store.date()) }}</span>
-          <button type="button" class="mbtn" [disabled]="store.isToday()" [attr.aria-label]="i18n.t('mgr.nextPage')" (click)="step(1)"><aon-icon name="chevron-right" [size]="18" /></button>
-        </div>
-        <button type="button" class="print" [disabled]="!data()" (click)="print()"><aon-icon name="printer" [size]="18" />{{ i18n.t('pdf.print') }}</button>
+        <aon-period-nav
+          [value]="store.date()"
+          [max]="today"
+          [label]="i18n.date(store.date())"
+          [groupLabel]="i18n.t('pdf.date')"
+          [prevLabel]="i18n.t('mgr.prevDay')"
+          [nextLabel]="i18n.t('mgr.nextDay')"
+          [pickLabel]="i18n.t('mgr.pickDay')"
+          [canNext]="!store.isToday()"
+          (stepped)="step($event)"
+          (picked)="pick($event)"
+        />
+        <button type="button" class="m-btn m-btn-gold" [disabled]="!data()" (click)="print()"><aon-icon name="printer" [size]="18" />{{ i18n.t('pdf.print') }}</button>
       </div>
     </div>
 
@@ -125,18 +133,18 @@ const R = WORKTIME_RULES;
                       @let over = Math.max(0, w.minutesToday - R.regularDayMin);
                       <tr [class.off]="w.presence === 'NOT_STARTED'" [class.flag]="w.minutesToday > R.maxDayMin">
                         <th scope="row"><span class="strong">{{ w.user.displayName }}</span>@if (w.user.crew) {<span class="muted"> · {{ w.user.crew }}</span>}</th>
-                        <td>{{ w.site ? w.site.projectName + ' · ' + w.site.name : '–' }}</td>
-                        <td class="r num">{{ w.shiftStartedAt ? i18n.time(w.shiftStartedAt) : '–' }}</td>
-                        <td class="r num">
+                        <td class="wide" [attr.data-label]="i18n.t('mgr.colSite')">{{ w.site ? w.site.projectName + ' · ' + w.site.name : '–' }}</td>
+                        <td class="r num" [attr.data-label]="i18n.t('pdf.colIn')">{{ w.shiftStartedAt ? i18n.time(w.shiftStartedAt) : '–' }}</td>
+                        <td class="r num" [attr.data-label]="i18n.t('pdf.colOut')">
                           @if (w.presence === 'WORKING') {
                             <span class="live">{{ i18n.t('rec.running') }}</span>
                           } @else {
                             {{ w.shiftEndedAt ? i18n.time(w.shiftEndedAt) : '–' }}
                           }
                         </td>
-                        <td class="r num strong" [class.bad]="w.minutesToday > R.maxDayMin">{{ w.minutesToday ? hm(w.minutesToday) : '–' }}</td>
-                        <td class="r num" [class.ot]="over > 0">{{ over ? hm(over) : '–' }}</td>
-                        <td class="muted">{{ w.summaryStatus ? i18n.t(summaryKey(w.summaryStatus)) : '–' }}</td>
+                        <td class="r num strong" [class.bad]="w.minutesToday > R.maxDayMin" [attr.data-label]="i18n.t('pdf.colHours')">{{ w.minutesToday ? hm(w.minutesToday) : '–' }}</td>
+                        <td class="r num" [class.ot]="over > 0" [attr.data-label]="i18n.t('pdf.colOvertime')">{{ over ? hm(over) : '–' }}</td>
+                        <td class="muted" [attr.data-label]="i18n.t('pdf.colReport')">{{ w.summaryStatus ? i18n.t(summaryKey(w.summaryStatus)) : '–' }}</td>
                       </tr>
                     }
                   </tbody>
@@ -144,8 +152,8 @@ const R = WORKTIME_RULES;
                     <tr>
                       <th scope="row">{{ i18n.t('rec.total') }}</th>
                       <td colspan="3"></td>
-                      <td class="r num">{{ hm(totals().minutes) }}</td>
-                      <td class="r num">{{ totals().over ? hm(totals().over) : '–' }}</td>
+                      <td class="r num" [attr.data-label]="i18n.t('pdf.colHours')">{{ hm(totals().minutes) }}</td>
+                      <td class="r num" [attr.data-label]="i18n.t('pdf.colOvertime')">{{ totals().over ? hm(totals().over) : '–' }}</td>
                       <td></td>
                     </tr>
                   </tfoot>
@@ -179,12 +187,12 @@ const R = WORKTIME_RULES;
                     @for (r of orders(); track r.order.id) {
                       <tr>
                         <th scope="row" class="num strong nowrap">{{ r.order.code ?? '–' }}</th>
-                        <td>{{ r.order.title }}</td>
-                        <td>{{ siteName(r.order.siteId) }}</td>
-                        <td>{{ crewNames(r.order.crew) }}</td>
-                        <td><span class="st" [attr.data-s]="r.order.status">{{ i18n.t(statusKey(r.order.status)) }}</span></td>
-                        <td class="r num">{{ r.minutesToday ? hm(r.minutesToday) : '–' }}</td>
-                        <td class="r num nowrap">
+                        <td class="wide">{{ r.order.title }}</td>
+                        <td class="wide" [attr.data-label]="i18n.t('mgr.colSite')">{{ siteName(r.order.siteId) }}</td>
+                        <td class="wide" [attr.data-label]="i18n.t('mgr.colCrew')">{{ crewNames(r.order.crew) }}</td>
+                        <td [attr.data-label]="i18n.t('mgr.colStatus')"><span class="st" [attr.data-s]="r.order.status">{{ i18n.t(statusKey(r.order.status)) }}</span></td>
+                        <td class="r num" [attr.data-label]="i18n.t('pdf.colWorked')">{{ r.minutesToday ? hm(r.minutesToday) : '–' }}</td>
+                        <td class="r num nowrap" [attr.data-label]="i18n.t('mgr.colProgress')">
                           @if (r.order.plannedQty > 0) {
                             {{ i18n.number(r.order.doneQty) }} / {{ i18n.number(r.order.plannedQty) }} {{ i18n.t(unitKey(r.order.unit)) }}
                             <span class="pbar" aria-hidden="true"><span [style.width.%]="progress(r.order)"></span></span>
@@ -269,17 +277,6 @@ const R = WORKTIME_RULES;
       gap: 0.75rem;
       min-width: 0;
     }
-    .back {
-      display: grid;
-      flex-shrink: 0;
-      place-items: center;
-      width: 2.75rem;
-      height: 2.75rem;
-      border: 1px solid var(--color-line-strong);
-      border-radius: 0.6rem;
-      background: var(--color-panel);
-      color: var(--color-text);
-    }
     .bar-title {
       font-size: 1.15rem;
       font-weight: 650;
@@ -295,46 +292,11 @@ const R = WORKTIME_RULES;
       align-items: center;
       gap: 0.6rem;
     }
-    .month {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.2rem;
-      padding: 0.2rem;
-      border: 1px solid var(--color-line-strong);
-      border-radius: 0.6rem;
-      background: var(--color-panel);
-    }
-    .mbtn {
-      display: grid;
-      place-items: center;
-      width: 2.4rem;
-      height: 2.4rem;
-      border-radius: 0.45rem;
-    }
-    .mbtn:hover:not(:disabled) {
-      background: var(--color-field);
-    }
-    .mbtn:disabled {
-      opacity: 0.35;
-    }
-    .mlabel {
-      min-width: 8.5rem;
-      font-weight: 600;
-      text-align: center;
-    }
-    .print {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.45rem;
-      min-height: 2.9rem;
-      padding: 0 1.1rem;
-      border-radius: 0.6rem;
-      background: var(--color-gold);
-      color: var(--color-charcoal);
-      font-weight: 650;
-    }
-    .print:disabled {
-      opacity: 0.5;
+    /* Under the phone's top bar: tablets keep the toolbar in view, phones give the height back to the sheet. */
+    @media (max-width: 900px) {
+      .bar {
+        top: 3.5rem;
+      }
     }
     .stage {
       padding: 1.5rem 1rem 3rem;
@@ -677,14 +639,15 @@ const R = WORKTIME_RULES;
     }
     @media (max-width: 700px) {
       .bar {
+        position: static;
         padding: 0.6rem 0.9rem;
       }
       .bar-sub {
         display: none;
       }
       .bar-r {
+        display: grid;
         width: 100%;
-        justify-content: space-between;
       }
       .stage {
         padding: 0.75rem 0.5rem 2rem;
@@ -717,6 +680,53 @@ const R = WORKTIME_RULES;
         grid-column: 1 / -1;
       }
     }
+    /* On a phone's screen each row is a small card, so no column hides past the edge; print keeps the table. */
+    @media screen and (max-width: 700px), screen and (min-width: 901px) and (max-width: 1000px) {
+      .scroll {
+        overflow: visible;
+      }
+      .t {
+        display: block;
+        min-width: 0;
+      }
+      .t thead {
+        display: none;
+      }
+      .t tbody,
+      .t tfoot {
+        display: block;
+      }
+      .t tbody tr,
+      .t tfoot tr {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.45rem 0.75rem;
+        padding: 0.7rem 0;
+      }
+      .t th,
+      .t td {
+        display: block;
+        padding: 0 !important;
+        text-align: left !important;
+        white-space: normal;
+        border: 0;
+      }
+      .t tbody th,
+      .t tfoot th,
+      .t td.wide {
+        grid-column: 1 / -1;
+      }
+      .t td:empty {
+        display: none;
+      }
+      .t td[data-label]::before {
+        content: attr(data-label);
+        display: block;
+        color: var(--muted, var(--color-text-muted));
+        font-size: 0.8rem;
+        font-weight: 400;
+      }
+    }
     @media print {
       .stage {
         padding: 0;
@@ -746,6 +756,7 @@ export class ReportComponent {
   /** `?date=YYYY-MM-DD`, bound by withComponentInputBinding. */
   readonly date = input<string | undefined>(undefined);
 
+  protected readonly today = toIsoDate();
   protected readonly Math = Math;
   protected readonly R = R;
   protected readonly hm = hm;
@@ -826,8 +837,12 @@ export class ReportComponent {
 
   protected step(n: number): void {
     const next = addDays(this.store.date(), n);
-    if (next > toIsoDate()) return;
+    if (next > this.today) return;
     this.store.setDate(next as IsoDate);
+  }
+
+  protected pick(value: string): void {
+    if (isIsoDate(value)) this.store.setDate(value);
   }
 
   protected print(): void {

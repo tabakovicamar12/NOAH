@@ -67,7 +67,7 @@ function dueSoon(o: ProjectOrderRow): boolean {
   imports: [RouterLink, NgTemplateOutlet, ConfirmDeleteComponent, IconComponent, StatusTagComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="px-4 pb-12 pt-5 sm:px-6 lg:px-8 lg:pt-7">
+    <div class="m-page pb-12">
       <ng-container *ngTemplateOutlet="topNew" />
       @if (deleting(); as d) {
         <aon-confirm-delete
@@ -143,17 +143,17 @@ function dueSoon(o: ProjectOrderRow): boolean {
     <ng-template #topNew>
       <header class="pt-head">
         <div>
-          <h1 class="pt-title">{{ i18n.t('projects.title') }}</h1>
+          <h1 class="m-title">{{ i18n.t('projects.title') }}</h1>
           @if (ready(); as r) {
             <p class="pt-sub">{{ i18n.t('projects.subtitle', { n: r.data.projects.length, o: siteCount() }) }}</p>
           }
         </div>
         <div class="pt-actions">
-          <button type="button" class="pt-quiet" [disabled]="state().kind === 'LOADING'" (click)="load()" [attr.aria-label]="i18n.t('mgr.refresh')">
+          <button type="button" class="m-btn m-btn-line m-btn-icon" [disabled]="state().kind === 'LOADING'" (click)="load()" [attr.aria-label]="i18n.t('mgr.refresh')">
             <aon-icon name="refresh" [size]="16" [class.animate-spin]="state().kind === 'LOADING'" />
           </button>
           @if (canManage()) {
-            <button type="button" class="pt-gold" [disabled]="adding() === NEW_PROJECT" (click)="openForm(NEW_PROJECT)">
+            <button type="button" class="m-btn m-btn-gold" [disabled]="adding() === NEW_PROJECT" (click)="openForm(NEW_PROJECT)">
               <aon-icon name="plus" [size]="16" [stroke]="2.25" />{{ i18n.t('projects.newProject') }}
             </button>
           }
@@ -164,7 +164,7 @@ function dueSoon(o: ProjectOrderRow): boolean {
         <p class="pt-cached" role="status"><aon-icon name="cloud-off" [size]="16" />{{ i18n.t('mgr.offlineCached', { time: i18n.date(at) + ' ' + i18n.time(at) }) }}</p>
       }
       <div class="pt-tools">
-        <label class="pt-search">
+        <label class="m-search pt-search">
           <span class="sr-only">{{ i18n.t('projects.search') }}</span>
           <aon-icon name="search" [size]="16" />
           <input type="search" [placeholder]="i18n.t('projects.search')" [value]="query()" (input)="query.set($any($event.target).value)" />
@@ -280,7 +280,7 @@ function dueSoon(o: ProjectOrderRow): boolean {
       } @else {
         <div class="pt-error" role="alert">
           <aon-icon name="alert" [size]="18" />{{ i18n.t('projects.loadFailed') }}
-          <button type="button" class="pt-quiet" (click)="load()">{{ i18n.t('common.retry') }}</button>
+          <button type="button" class="m-btn m-btn-line" (click)="load()">{{ i18n.t('common.retry') }}</button>
         </div>
       }
     </ng-template>
@@ -312,7 +312,7 @@ function dueSoon(o: ProjectOrderRow): boolean {
           <button type="submit" class="as-save" [disabled]="saving()">
             <aon-icon name="plus" [size]="16" [stroke]="2.25" />{{ saving() ? i18n.t('projects.adding') : i18n.t('projects.add') }}
           </button>
-          <button type="button" class="pt-quiet" (click)="closeForm()">{{ i18n.t('common.cancel') }}</button>
+          <button type="button" class="m-btn m-btn-line" (click)="closeForm()">{{ i18n.t('common.cancel') }}</button>
         </div>
       </ng-template>
 
@@ -356,7 +356,7 @@ function dueSoon(o: ProjectOrderRow): boolean {
             }
             <div class="as-foot">
               <button type="submit" class="as-save" [disabled]="saving()">{{ saving() ? i18n.t('projects.saving') : i18n.t('common.save') }}</button>
-              <button type="button" class="pt-quiet" (click)="closeEdit()">{{ i18n.t('common.cancel') }}</button>
+              <button type="button" class="m-btn m-btn-line" (click)="closeEdit()">{{ i18n.t('common.cancel') }}</button>
               <span class="as-spacer"></span>
               <button type="button" class="as-archive" [disabled]="saving()" (click)="archive()">
                 <aon-icon name="archive" [size]="15" />{{ i18n.t(confirmArchive() ? 'projects.archiveConfirm' : e.kind === 'PROJECT' ? 'projects.archiveProject' : 'projects.archiveSite') }}
@@ -903,12 +903,6 @@ function dueSoon(o: ProjectOrderRow): boolean {
       justify-content: space-between;
       gap: 0.75rem 1.5rem;
     }
-    .pt-title {
-      font-size: clamp(1.6rem, 1.3rem + 1.2vw, 2.09rem);
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      line-height: 1.15;
-    }
     .pt-sub {
       margin-top: 0.3rem;
       color: var(--color-text-muted);
@@ -916,38 +910,6 @@ function dueSoon(o: ProjectOrderRow): boolean {
     .pt-actions {
       display: flex;
       gap: 0.5rem;
-    }
-    .pt-quiet {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.4rem;
-      min-width: 2.6rem;
-      min-height: 2.6rem;
-      padding: 0 0.7rem;
-      border: 1px solid var(--color-line-strong);
-      border-radius: 0.5rem;
-      background: var(--color-panel);
-      color: var(--color-text);
-      font-weight: 500;
-    }
-    .pt-quiet:hover {
-      background: var(--color-field);
-    }
-    .pt-gold {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.45rem;
-      min-height: 2.6rem;
-      padding: 0 1rem;
-      border-radius: 0.5rem;
-      background: var(--color-gold);
-      color: var(--color-charcoal);
-      font-weight: 600;
-      box-shadow: 0 1px 2px rgb(20 20 20 / 0.12), inset 0 -2px 0 rgb(0 0 0 / 0.08);
-    }
-    .pt-gold:hover:not(:disabled) {
-      filter: brightness(1.04);
     }
     .pt-cached {
       display: flex;
@@ -968,37 +930,14 @@ function dueSoon(o: ProjectOrderRow): boolean {
       margin: 1.25rem 0 1rem;
     }
     .pt-search {
-      display: flex;
       flex: 1 1 18rem;
       max-width: 28rem;
-      align-items: center;
-      gap: 0.5rem;
-      height: 2.6rem;
-      padding: 0 0.8rem;
-      border: 1px solid var(--color-line);
-      border-radius: 0.5rem;
-      background: var(--color-panel);
-      color: var(--color-text-muted);
-      box-shadow: 0 1px 2px rgb(20 20 20 / 0.04);
-    }
-    .pt-search:focus-within {
-      border-color: var(--color-gold);
-      box-shadow: 0 0 0 3px rgb(193 160 80 / 0.18);
-    }
-    .pt-search input {
-      width: 100%;
-      min-width: 0;
-      border: 0;
-      background: transparent;
-      color: var(--color-text);
-      font-size: 1rem;
-      outline: none;
     }
     .pt-check {
       display: flex;
       align-items: center;
       gap: 0.55rem;
-      min-height: 2.6rem;
+      min-height: var(--m-tap);
       cursor: pointer;
     }
     .pt-error {
@@ -1056,6 +995,12 @@ function dueSoon(o: ProjectOrderRow): boolean {
       transform: scale(1.35);
       box-shadow: 0 0 0 3px rgb(255 255 255), 0 0 0 4px var(--color-charcoal);
       outline: none;
+    }
+    /* A finger-sized target around the small dot. */
+    a.pw-dot::after {
+      content: '';
+      position: absolute;
+      inset: -0.65rem;
     }
     .pw-dot.is-dim {
       opacity: 0.18;
@@ -1116,6 +1061,7 @@ function dueSoon(o: ProjectOrderRow): boolean {
     .pw3-name {
       display: flex;
       min-width: 0;
+      min-height: var(--m-tap);
       align-items: center;
       gap: 0.35rem;
       color: var(--color-text);
@@ -1223,7 +1169,7 @@ function dueSoon(o: ProjectOrderRow): boolean {
       display: inline-flex;
       align-items: center;
       gap: 0.35rem;
-      min-height: 2.25rem;
+      min-height: var(--m-tap);
       padding: 0 0.6rem;
       border-radius: 0.45rem;
       color: var(--color-text-muted);

@@ -2,10 +2,11 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, ou
 import { RouterLink } from '@angular/router';
 import { I18nService } from '../../core/i18n/i18n.service';
 import type { WorkOrderDetailResponse } from '../../core/models/api.models';
-import { PHOTO_CATEGORIES, type PhotoCategory, type WorkOrderStatus } from '../../core/models/domain.models';
+import { PHOTO_CATEGORIES, materialLines, type PhotoCategory, type WorkOrderStatus } from '../../core/models/domain.models';
 import { ClockService } from '../../core/ui/clock.service';
 import { formatDuration, minutesBetween, toIsoDate } from '../../core/util/util';
 import { IconComponent } from '../../shared/ui/icon.component';
+import { PhotoViewerComponent } from '../../shared/ui/photo-viewer.component';
 import { ReportStatusComponent } from '../../shared/ui/report-status.component';
 import { ManagerStore } from './data/manager-store.service';
 import { avatarTone, initialsOf } from './person';
@@ -18,7 +19,7 @@ type DrillState = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { 
  */
 @Component({
   selector: 'aon-order-drill',
-  imports: [IconComponent, RouterLink, ReportStatusComponent],
+  imports: [IconComponent, RouterLink, ReportStatusComponent, PhotoViewerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'drill',
@@ -114,13 +115,13 @@ type DrillState = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { 
               </p>
             }
             <div class="cards">
-              <details class="card" [open]="d.order.materials.length > 0">
-                <summary><aon-icon name="package" [size]="17" />{{ i18n.t('drill.material') }}<span class="cnt">{{ d.order.materials.length }}</span><aon-icon name="chevron-right" [size]="17" class="chev" /></summary>
+              <details class="card" [open]="materialRows().length > 0">
+                <summary><aon-icon name="package" [size]="17" />{{ i18n.t('drill.material') }}<span class="cnt">{{ materialRows().length }}</span><aon-icon name="chevron-right" [size]="17" class="chev" /></summary>
                 <div class="card-b">
-                  @if (d.order.materials.length) {
+                  @if (materialRows().length) {
                     <ul class="mat">
-                      @for (m of d.order.materials; track $index) {
-                        <li><span>{{ m.name }}</span><span class="muted num">@if (m.qty !== null) {{{ i18n.number(m.qty) }} {{ m.unit }}}</span></li>
+                      @for (m of materialRows(); track m.key) {
+                        <li><span>{{ m.name }}</span><span class="muted num">{{ i18n.number(m.used) }}@if (m.planned !== null) { / {{ i18n.number(m.planned) }}} {{ m.unit ?? '' }}</span></li>
                       }
                     </ul>
                   } @else {
@@ -188,6 +189,10 @@ type DrillState = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { 
                               <span class="row-main is-fix">{{ i18n.t('order.logCorrection', { q: i18n.number(-(l.quantity ?? 0)), unit: i18n.t(unitKey()) }) }}</span>
                             } @else if (l.kind === 'QUANTITY') {
                               <span class="row-main">{{ i18n.t('order.logQuantity', { q: i18n.number(l.quantity ?? 0), unit: i18n.t(unitKey()) }) }}</span>
+                            } @else if (l.kind === 'MATERIAL' && (l.quantity ?? 0) < 0) {
+                              <span class="row-main is-fix">{{ i18n.t('mat.logFix', { name: l.materialName ?? '', q: i18n.number(-(l.quantity ?? 0)), unit: l.materialUnit ?? '' }) }}</span>
+                            } @else if (l.kind === 'MATERIAL') {
+                              <span class="row-main">{{ i18n.t('mat.logAdd', { name: l.materialName ?? '', q: i18n.number(l.quantity ?? 0), unit: l.materialUnit ?? '' }) }}</span>
                             }
                             @if (l.text) {
                               <span class="row-text">{{ l.text }}</span>
@@ -221,22 +226,17 @@ type DrillState = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { 
             </div>
           </div>
           @if (openPhoto() !== null && d.photos[openPhoto() ?? 0]; as ph) {
-            <div class="lb" role="dialog" aria-modal="true" [attr.aria-label]="i18n.t(photoKey(ph.category))" (click)="openPhoto.set(null)">
-              <figure class="lb-fig" (click)="$event.stopPropagation()">
-                @if (ph.url) {
-                  <img [src]="ph.url" [alt]="i18n.t('photo.alt', { category: i18n.t(photoKey(ph.category)), code: d.order.code ?? '' })" />
-                }
-                <figcaption>
-                  <span>{{ i18n.t(photoKey(ph.category)) }} · {{ ph.userName }} · {{ i18n.dateShort(ph.createdAt) }} {{ i18n.time(ph.createdAt) }}</span>
-                  <span class="num">{{ (openPhoto() ?? 0) + 1 }} / {{ d.photos.length }}</span>
-                </figcaption>
-              </figure>
-              @if (d.photos.length > 1) {
-                <button type="button" class="lb-btn lb-prev" [attr.aria-label]="i18n.t('photo.prev')" (click)="$event.stopPropagation(); stepPhoto(-1)"><aon-icon name="chevron-left" [size]="26" /></button>
-                <button type="button" class="lb-btn lb-next" [attr.aria-label]="i18n.t('photo.next')" (click)="$event.stopPropagation(); stepPhoto(1)"><aon-icon name="chevron-right" [size]="26" /></button>
-              }
-              <button type="button" class="lb-btn lb-close" [attr.aria-label]="i18n.t('common.close')" (click)="openPhoto.set(null)"><aon-icon name="x" [size]="22" /></button>
-            </div>
+            <aon-photo-viewer
+              [src]="ph.url"
+              [alt]="i18n.t('photo.alt', { category: i18n.t(photoKey(ph.category)), code: d.order.code ?? '' })"
+              [title]="i18n.t(photoKey(ph.category))"
+              [meta]="ph.userName + ' · ' + i18n.dateShort(ph.createdAt) + ' ' + i18n.time(ph.createdAt)"
+              [caption]="ph.caption"
+              [index]="openPhoto() ?? 0"
+              [total]="d.photos.length"
+              (step)="stepPhoto($event)"
+              (closed)="openPhoto.set(null)"
+            />
           }
         }
       </div>
@@ -284,8 +284,8 @@ type DrillState = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { 
     .ib {
       display: grid;
       place-items: center;
-      width: 2.25rem;
-      height: 2.25rem;
+      width: var(--m-tap);
+      height: var(--m-tap);
       border-radius: 0.45rem;
       color: var(--color-text-muted);
       transition: background-color 140ms ease-out, color 140ms ease-out;
@@ -543,39 +543,6 @@ type DrillState = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { 
       font-weight: 500;
       text-align: center;
     }
-    /* Lightbox: one photo at a time, arrows and Esc work. */
-    .lb {
-      position: fixed;
-      inset: 0;
-      z-index: 120;
-      display: grid;
-      place-items: center;
-      padding: 3.5rem 4.5rem;
-      background: rgb(20 20 20 / 0.86);
-      animation: v-fade 180ms ease-out;
-    }
-    .lb-fig { display: grid; gap: 0.6rem; max-width: min(72rem, 100%); max-height: 100%; }
-    .lb-fig img { max-width: 100%; max-height: calc(100dvh - 9rem); border-radius: 0.5rem; object-fit: contain; background: #111; }
-    .lb-fig figcaption { display: flex; justify-content: space-between; gap: 1rem; color: #ecebe7; font-size: 0.93rem; }
-    .lb-btn {
-      position: absolute;
-      display: grid;
-      place-items: center;
-      width: 3rem;
-      height: 3rem;
-      border-radius: 9999px;
-      background: rgb(255 255 255 / 0.1);
-      color: #fff;
-      transition: background-color 140ms ease-out;
-    }
-    .lb-btn:hover { background: rgb(255 255 255 / 0.2); }
-    .lb-prev { left: 1rem; top: 50%; translate: 0 -50%; }
-    .lb-next { right: 1rem; top: 50%; translate: 0 -50%; }
-    .lb-close { top: 1rem; right: 1rem; }
-    @keyframes v-fade { from { opacity: 0; } }
-    @media (prefers-reduced-motion: reduce) {
-      .lb { animation: none !important; }
-    }
 
     .vr { display: flex; flex-direction: column; height: 100%; min-height: 0; }
     .hd { padding: 1.15rem 1.4rem 1rem; border-bottom: 1px solid var(--color-line); }
@@ -690,6 +657,10 @@ export class OrderDrillComponent {
     return est > 0 && this.totalMinutes() > est;
   });
 
+  protected readonly materialRows = computed(() => {
+    const o = this.detail()?.order;
+    return o ? materialLines(o) : [];
+  });
   protected readonly issues = computed(() => (this.detail()?.logs ?? []).filter((l) => l.kind === 'ISSUE'));
   protected readonly notes = computed(() => (this.detail()?.logs ?? []).filter((l) => l.kind !== 'ISSUE'));
   protected readonly unitKey = computed(() => `unit.${this.detail()?.order.unit ?? 'PCS'}` as const);

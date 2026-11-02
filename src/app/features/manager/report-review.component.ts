@@ -43,7 +43,7 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
           <p class="rv-flag is-bad" role="alert">
             <aon-icon name="alert" [size]="16" />{{ i18n.t('review.loadFailed') }}
           </p>
-          <button type="button" class="rv-btn is-back mt-3" (click)="reload()">
+          <button type="button" class="m-btn m-btn-line mt-3" (click)="reload()">
             <aon-icon name="retry" [size]="16" />{{ i18n.t('common.retry') }}
           </button>
         </div>
@@ -56,7 +56,7 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
               <p><b>{{ i18n.dateLong(s.date) }}</b>@if (d.worker.crew) {<span> · {{ d.worker.crew }}</span>}@if (s.siteName) {<span> · {{ s.siteName }}</span>}</p>
               <aon-report-status [status]="s.status" />
             </div>
-            <a class="rv-btn is-back w-fit" [routerLink]="['/m/reports', s.id]">
+            <a class="m-btn m-btn-line w-fit" [routerLink]="['/m/reports', s.id]">
               <aon-icon name="printer" [size]="16" />{{ i18n.t('pdf.print') }}
             </a>
 

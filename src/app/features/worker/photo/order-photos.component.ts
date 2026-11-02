@@ -9,6 +9,7 @@ import { BlobUrls } from '../../../shared/ui/blob-urls';
 import { ConfirmDeleteComponent } from '../../../shared/ui/confirm-delete.component';
 import { NoticeSheetComponent, type NoticePoint } from '../../../shared/ui/notice-sheet.component';
 import { IconComponent } from '../../../shared/ui/icon.component';
+import { PhotoViewerComponent } from '../../../shared/ui/photo-viewer.component';
 import { WorkerStore } from '../data/worker-store.service';
 import { workflowMessage } from '../data/workflow-messages';
 import { PHOTO_ICON, PhotoReviewComponent } from './photo-review.component';
@@ -28,7 +29,7 @@ const SUGGESTED: Readonly<Record<WorkOrderStatus, PhotoCategory>> = {
  */
 @Component({
   selector: 'aon-order-photos',
-  imports: [ConfirmDeleteComponent, IconComponent, PhotoReviewComponent, NoticeSheetComponent],
+  imports: [ConfirmDeleteComponent, IconComponent, PhotoReviewComponent, PhotoViewerComponent, NoticeSheetComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="w-card" aria-labelledby="photos-title">
@@ -41,10 +42,15 @@ const SUGGESTED: Readonly<Record<WorkOrderStatus, PhotoCategory>> = {
             <small>{{ i18n.t('photo.count', { n: mine().length }) }}</small>
           }
         </h2>
-        <div class="ph-tools">
-          <button type="button" class="ph-gadd" (click)="fromGallery()"><aon-icon name="plus" [size]="17" [stroke]="2" />{{ i18n.t('photo.upload') }}</button>
-        </div>
+        @if (canLog()) {
+          <div class="ph-tools">
+            <button type="button" class="ph-gadd" (click)="fromGallery()"><aon-icon name="plus" [size]="17" [stroke]="2" />{{ i18n.t('photo.upload') }}</button>
+          </div>
+        }
       </div>
+      @if (waiting()) {
+        <p class="w-small w-muted mt-2">{{ i18n.t('order.startToLog') }}</p>
+      }
       @if (pressure() !== null && pressure()! > 0.85) {
         <p class="w-alert mt-3" role="status"><aon-icon name="alert" [size]="18" />{{ i18n.t('photo.storageLow') }}</p>
       }
@@ -52,6 +58,7 @@ const SUGGESTED: Readonly<Record<WorkOrderStatus, PhotoCategory>> = {
       <div class="ph-groups">
         @for (c of categories; track c) {
           @let list = byCategory()[c];
+          @if (list.length || canLog()) {
           <div class="ph-group" [class.is-bad]="c === 'ISSUE'" [class.is-empty]="!list.length">
             <div class="ph-ghead">
               <span class="ph-gname">
@@ -60,12 +67,14 @@ const SUGGESTED: Readonly<Record<WorkOrderStatus, PhotoCategory>> = {
                   <span class="ph-gn">{{ list.length }}</span>
                 }
               </span>
-              <button type="button" class="ph-gadd" [attr.aria-label]="i18n.t('photo.addTo', { category: i18n.t(catKey(c)) })" (click)="open(c)">
-                <aon-icon name="camera" [size]="17" [stroke]="2" />
-                @if (!list.length) {
-                  <span>{{ i18n.t('photo.take') }}</span>
-                }
-              </button>
+              @if (canLog()) {
+                <button type="button" class="ph-gadd" [attr.aria-label]="i18n.t('photo.addTo', { category: i18n.t(catKey(c)) })" (click)="open(c)">
+                  <aon-icon name="camera" [size]="17" [stroke]="2" />
+                  @if (!list.length) {
+                    <span>{{ i18n.t('photo.take') }}</span>
+                  }
+                </button>
+              }
             </div>
             @if (list.length) {
               <ul class="ph-strip">
@@ -91,6 +100,7 @@ const SUGGESTED: Readonly<Record<WorkOrderStatus, PhotoCategory>> = {
               </ul>
             }
           </div>
+          }
         }
       </div>
       @if (uploadedOnly() > 0) {
@@ -101,24 +111,18 @@ const SUGGESTED: Readonly<Record<WorkOrderStatus, PhotoCategory>> = {
     <input #gallery type="file" accept="image/*" multiple class="sr-only" tabindex="-1" aria-hidden="true" (change)="picked($event)" />
 
     @if (viewing(); as p) {
-      <div class="fixed inset-0 z-[70] flex flex-col bg-charcoal-deep text-white" role="dialog" aria-modal="true" [attr.aria-label]="i18n.t(catKey(p.category))" (keydown.escape)="viewing.set(null)">
-        <div class="flex items-center justify-between gap-3 bg-charcoal px-4 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)]">
-          <p class="min-w-0">
-            <span class="block text-lg font-semibold leading-tight">{{ i18n.t(catKey(p.category)) }}</span>
-            <span class="block truncate text-sm font-semibold text-on-dark-muted">{{ orderLabel() }}@if (order().siteName) { · {{ order().siteName }}}</span>
-            <span class="block truncate text-sm text-on-dark-muted">{{ workerName() }} · {{ i18n.date(p.createdAt) }} {{ i18n.time(p.createdAt) }}</span>
-          </p>
-          <button type="button" class="grid size-12 place-items-center rounded-lg bg-white/10" [attr.aria-label]="i18n.t('common.close')" (click)="viewing.set(null)">
-            <aon-icon name="x" [size]="22" [stroke]="2" />
-          </button>
-        </div>
-        <div class="grid min-h-0 flex-1 place-items-center p-4">
-          <img [src]="fullUrl(p)" [alt]="i18n.t('photo.alt', { category: i18n.t(catKey(p.category)), code: orderLabel() })" class="max-h-full max-w-full object-contain" />
-        </div>
-        <div class="grid gap-3 bg-ground px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-4 text-ink">
-          @if (p.caption) {
-            <p class="leading-snug">{{ p.caption }}</p>
-          }
+      <aon-photo-viewer
+        [src]="fullUrl(p)"
+        [alt]="i18n.t('photo.alt', { category: i18n.t(catKey(p.category)), code: orderLabel() })"
+        [title]="i18n.t(catKey(p.category))"
+        [meta]="viewMeta(p)"
+        [caption]="p.caption"
+        [index]="viewIndex()"
+        [total]="ordered().length"
+        (step)="stepView($event)"
+        (closed)="viewing.set(null)"
+      >
+        <div class="view-foot">
           <p class="w-small w-muted flex items-center gap-1.5">
             <aon-icon [name]="p.synced ? 'circle-check' : 'refresh'" [size]="15" />
             {{ p.synced ? i18n.t('photo.uploaded') : i18n.t('photo.waiting') }}
@@ -132,7 +136,7 @@ const SUGGESTED: Readonly<Record<WorkOrderStatus, PhotoCategory>> = {
             </button>
           }
         </div>
-      </div>
+      </aon-photo-viewer>
     }
 
     @if (removing(); as r) {
@@ -197,12 +201,15 @@ const SUGGESTED: Readonly<Record<WorkOrderStatus, PhotoCategory>> = {
       display: flex;
       gap: 0.4rem;
     }
+    /* minmax(0, 1fr): a long strip of photos scrolls inside its row and never widens the page. */
     .ph-groups {
       display: grid;
+      grid-template-columns: minmax(0, 1fr);
       gap: 0.45rem;
       margin-top: 0.8rem;
     }
     .ph-group {
+      min-width: 0;
       padding: 0.45rem 0.5rem 0.55rem 0.7rem;
       border-radius: 0.65rem;
       background: var(--color-row-tint);
@@ -316,6 +323,22 @@ const SUGGESTED: Readonly<Record<WorkOrderStatus, PhotoCategory>> = {
     .del {
       color: var(--color-bad);
     }
+    /* Under the photo in the viewer: where it stands, and delete. */
+    .view-foot {
+      display: grid;
+      flex: 0 0 auto;
+      gap: 0.6rem;
+      padding: 0.75rem 0.875rem calc(env(safe-area-inset-bottom) + 0.75rem);
+      background: var(--color-panel);
+      color: var(--color-text);
+    }
+    @media (max-height: 500px) {
+      .view-foot {
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        padding-block: 0.3rem;
+      }
+    }
     /* Remove sits on the photo's corner: a full 2.75rem target, drawn as a small dark disc. */
     .thumb-del {
       position: absolute;
@@ -350,6 +373,10 @@ export class OrderPhotosComponent {
 
   readonly order = input.required<LocalWorkOrder>();
   readonly orderLabel = input<string>('');
+  /** The order is running on this phone: photos can be taken. */
+  readonly canLog = input(false);
+  /** Not started yet: existing photos can be looked at, and the card says why there is no camera. */
+  readonly waiting = input(false);
 
   protected readonly pressure = signal<number | null>(null);
   protected readonly viewing = signal<LocalPhoto | null>(null);
@@ -385,6 +412,9 @@ export class OrderPhotosComponent {
     for (const p of [...this.withPreview()].sort((a, b) => b.createdAt - a.createdAt)) out[p.category].push(p);
     return out;
   });
+  /** The order the viewer turns through: the same as on the screen. */
+  protected readonly ordered = computed(() => PHOTO_CATEGORIES.flatMap((c) => this.byCategory()[c]));
+  protected readonly viewIndex = computed(() => Math.max(0, this.ordered().findIndex((p) => p.id === this.viewing()?.id)));
   protected readonly pendingCount = computed(() => this.mine().filter((p) => !p.synced).length);
   protected readonly uploadedOnly = computed(() => this.mine().length - this.withPreview().length);
 
@@ -396,6 +426,16 @@ export class OrderPhotosComponent {
 
   protected catKey(c: PhotoCategory): `photoCat.${PhotoCategory}` {
     return `photoCat.${c}`;
+  }
+
+  protected viewMeta(p: LocalPhoto): string {
+    const where = [this.orderLabel(), this.order().siteName].filter(Boolean).join(' · ');
+    return `${where} · ${this.workerName()} · ${this.i18n.date(p.createdAt)} ${this.i18n.time(p.createdAt)}`;
+  }
+
+  protected stepView(by: -1 | 1): void {
+    const list = this.ordered();
+    if (list.length) this.viewing.set(list[(this.viewIndex() + by + list.length) % list.length] ?? null);
   }
 
   protected previewUrl(p: LocalPhoto): string | null {

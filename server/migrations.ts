@@ -294,6 +294,17 @@ alter table work_orders drop constraint if exists work_orders_planned_qty_check;
 alter table work_orders add constraint work_orders_planned_qty_check check (planned_qty >= 0);
 `,
   },
+  {
+    id: '012_material_usage',
+    // Materials used on an order: each entry is a log row, and the order keeps the running total per material.
+    sql: `
+alter table work_orders add column if not exists material_usage jsonb not null default '[]'::jsonb;
+alter table logs add column if not exists material_name text;
+alter table logs add column if not exists material_unit text;
+alter table logs drop constraint if exists logs_kind_check;
+alter table logs add constraint logs_kind_check check (kind in ('QUANTITY', 'MATERIAL', 'NOTE', 'ISSUE'));
+`,
+  },
 ];
 
 export async function migrate(db: Db, log: (msg: string) => void = () => undefined): Promise<string[]> {

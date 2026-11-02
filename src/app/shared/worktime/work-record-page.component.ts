@@ -8,6 +8,7 @@ import { HoursData, type HoursSide } from '../../core/worktime/hours-data.servic
 import { isMonth, shiftMonth } from '../../core/worktime/worktime';
 import { toIsoDate } from '../../core/util/util';
 import { IconComponent } from '../ui/icon.component';
+import { PeriodNavComponent } from '../ui/period-nav.component';
 import { WorkRecordComponent } from './work-record.component';
 
 type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { readonly kind: 'READY'; readonly data: HoursResponse; readonly cachedAt: number | null };
@@ -19,12 +20,12 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
  */
 @Component({
   selector: 'aon-work-record-page',
-  imports: [RouterLink, IconComponent, WorkRecordComponent],
+  imports: [RouterLink, IconComponent, PeriodNavComponent, WorkRecordComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="bar no-print">
       <div class="bar-l">
-        <a [routerLink]="backLink()" [queryParams]="side() === 'manager' ? { month: month() } : null" class="back" [attr.aria-label]="i18n.t('common.back')">
+        <a [routerLink]="backLink()" [queryParams]="side() === 'manager' ? { month: month() } : null" class="m-back" [attr.aria-label]="i18n.t('common.back')">
           <aon-icon name="arrow-left" [size]="20" [stroke]="2.2" />
         </a>
         <div class="min-w-0">
@@ -33,12 +34,20 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
         </div>
       </div>
       <div class="bar-r">
-        <div class="month" role="group" [attr.aria-label]="monthLabel()">
-          <button type="button" class="mbtn" [attr.aria-label]="i18n.t('hours.prevMonth')" (click)="go(-1)"><aon-icon name="chevron-left" [size]="18" /></button>
-          <span class="mlabel">{{ monthLabel() }}</span>
-          <button type="button" class="mbtn" [disabled]="isCurrent()" [attr.aria-label]="i18n.t('hours.nextMonth')" (click)="go(1)"><aon-icon name="chevron-right" [size]="18" /></button>
-        </div>
-        <button type="button" class="print" [disabled]="state().kind !== 'READY' || !hasWorker()" (click)="print()">
+        <aon-period-nav
+          kind="month"
+          [value]="month()"
+          [max]="thisMonth"
+          [label]="monthLabel()"
+          [groupLabel]="monthLabel()"
+          [prevLabel]="i18n.t('hours.prevMonth')"
+          [nextLabel]="i18n.t('hours.nextMonth')"
+          [pickLabel]="i18n.t('hours.pickMonth')"
+          [canNext]="!isCurrent()"
+          (stepped)="go($event)"
+          (picked)="pick($event)"
+        />
+        <button type="button" class="m-btn m-btn-gold" [disabled]="state().kind !== 'READY' || !hasWorker()" (click)="print()">
           <aon-icon name="printer" [size]="18" />{{ i18n.t('pdf.print') }}
         </button>
       </div>
@@ -96,17 +105,6 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
       gap: 0.75rem;
       min-width: 0;
     }
-    .back {
-      display: grid;
-      flex-shrink: 0;
-      place-items: center;
-      width: 2.75rem;
-      height: 2.75rem;
-      border: 1px solid var(--color-line-strong);
-      border-radius: 0.6rem;
-      background: var(--color-panel);
-      color: var(--color-text);
-    }
     .bar-title {
       font-size: 1.15rem;
       font-weight: 650;
@@ -122,47 +120,11 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
       align-items: center;
       gap: 0.6rem;
     }
-    .month {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.2rem;
-      padding: 0.2rem;
-      border: 1px solid var(--color-line-strong);
-      border-radius: 0.6rem;
-      background: var(--color-panel);
-    }
-    .mbtn {
-      display: grid;
-      place-items: center;
-      width: 2.4rem;
-      height: 2.4rem;
-      border-radius: 0.45rem;
-    }
-    .mbtn:hover:not(:disabled) {
-      background: var(--color-field);
-    }
-    .mbtn:disabled {
-      opacity: 0.35;
-    }
-    .mlabel {
-      min-width: 8.5rem;
-      font-weight: 600;
-      text-align: center;
-      text-transform: capitalize;
-    }
-    .print {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.45rem;
-      min-height: 2.9rem;
-      padding: 0 1.1rem;
-      border-radius: 0.6rem;
-      background: var(--color-gold);
-      color: var(--color-charcoal);
-      font-weight: 650;
-    }
-    .print:disabled {
-      opacity: 0.5;
+    /* Under the phone's top bar: tablets keep the toolbar in view, phones give the height back to the sheet. */
+    @media (max-width: 900px) {
+      .bar {
+        top: 3.5rem;
+      }
     }
     .stage {
       padding: 1.5rem 1rem 3rem;
@@ -204,14 +166,15 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
     }
     @media (max-width: 700px) {
       .bar {
+        position: static;
         padding: 0.6rem 0.9rem;
       }
       .bar-sub {
         display: none;
       }
       .bar-r {
+        display: grid;
         width: 100%;
-        justify-content: space-between;
       }
       .stage {
         padding: 0.75rem 0.5rem 2rem;
@@ -245,7 +208,7 @@ export class WorkRecordPageComponent {
   readonly userId = input<string | undefined>(undefined);
   readonly monthParam = input<string | undefined>(undefined, { alias: 'month' });
 
-  private readonly thisMonth = toIsoDate().slice(0, 7);
+  protected readonly thisMonth = toIsoDate().slice(0, 7);
   protected readonly month = computed(() => {
     const m = this.monthParam();
     return m && isMonth(m) && m <= this.thisMonth ? m : this.thisMonth;
@@ -297,6 +260,10 @@ export class WorkRecordPageComponent {
   protected go(step: number): void {
     const next = shiftMonth(this.month(), step);
     void this.router.navigate([], { queryParams: { month: next === this.thisMonth ? null : next }, replaceUrl: true });
+  }
+
+  protected pick(value: string): void {
+    if (isMonth(value) && value <= this.thisMonth) void this.router.navigate([], { queryParams: { month: value === this.thisMonth ? null : value }, replaceUrl: true });
   }
 
   protected print(): void {

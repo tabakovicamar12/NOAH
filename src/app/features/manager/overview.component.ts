@@ -8,8 +8,10 @@ import { hasQuantity, type DailySummary, type DailySummaryStatus, type QuantityU
 import { NetworkStatusService } from '../../core/network/network-status.service';
 import { ToastService } from '../../core/ui/toast.service';
 import { compareCodes, formatDuration, isIsoDate, toIsoDate } from '../../core/util/util';
+import { addDays } from '../../core/worktime/worktime';
 import { ConfirmDeleteComponent } from '../../shared/ui/confirm-delete.component';
 import { IconComponent } from '../../shared/ui/icon.component';
+import { PeriodNavComponent } from '../../shared/ui/period-nav.component';
 import { ReportStatusComponent } from '../../shared/ui/report-status.component';
 import { progressRatio } from '../../shared/ui/tag-style';
 import { ManagerStore } from './data/manager-store.service';
@@ -32,6 +34,8 @@ interface OrderRow extends OrderOverview {
 const STATUS_RANK: Readonly<Record<WorkOrderStatus, number>> = { ISSUE: 0, IN_PROGRESS: 1, NEW: 2, COMPLETED: 3 };
 /** Orders per table page; the manager pages through the rest. */
 const PAGE_SIZE = 8;
+/** A place in the pager: a page number, or `null` for the dots that stand for the pages between. */
+type PageItem = { readonly key: string; readonly page: number | null };
 const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FINISHED: 1, NOT_STARTED: 2 };
 
 /**
@@ -40,31 +44,37 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
  */
 @Component({
   selector: 'aon-manager-overview',
-  imports: [NgTemplateOutlet, RouterLink, ConfirmDeleteComponent, IconComponent, ReportStatusComponent, OrderDrillComponent, ReportReviewComponent],
+  imports: [NgTemplateOutlet, RouterLink, ConfirmDeleteComponent, IconComponent, PeriodNavComponent, ReportStatusComponent, OrderDrillComponent, ReportReviewComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown)': 'onKey($event)' },
   template: `
     <div class="page" [class.has-inspector]="!!panel()">
       <div class="work">
         <div class="topline">
-          <label class="day">
-            <span class="sr-only">{{ i18n.t('mgr.dayLabel') }}</span>
-            <span>{{ dayLabel() }}</span>
-            <aon-icon name="chevron-down" [size]="18" [stroke]="1.8" />
-            <input type="date" [value]="store.date()" [max]="today" (click)="openCalendar($event)" (change)="onDate($event)" />
-          </label>
+          <aon-period-nav
+            [value]="store.date()"
+            [max]="today"
+            [label]="dayLabel()"
+            [groupLabel]="i18n.t('mgr.dayLabel')"
+            [prevLabel]="i18n.t('mgr.prevDay')"
+            [nextLabel]="i18n.t('mgr.nextDay')"
+            [pickLabel]="i18n.t('mgr.pickDay')"
+            [canNext]="!store.isToday()"
+            (stepped)="stepDay($event)"
+            (picked)="pickDay($event)"
+          />
         </div>
 
         <div class="titleline">
-          <h1 class="title">{{ mode() === 'workers' ? i18n.t('mgr.navTeam') : mode() === 'reviews' ? i18n.t('mgr.reviewsTitle') : i18n.t('mgr.navOrders') }}@if (scopeName()) {<span class="sr-only"> · {{ scopeName() }}</span>}</h1>
+          <h1 class="m-title">{{ mode() === 'workers' ? i18n.t('mgr.navTeam') : mode() === 'reviews' ? i18n.t('mgr.reviewsTitle') : i18n.t('mgr.navOrders') }}@if (scopeName()) {<span class="sr-only"> · {{ scopeName() }}</span>}</h1>
           @if (mode() === 'orders') {
-            <a routerLink="/m/orders/new" class="new"><aon-icon name="plus" [size]="18" [stroke]="2.2" />{{ i18n.t('mgr.navNewOrder') }}</a>
+            <a routerLink="/m/orders/new" class="m-btn m-btn-gold"><aon-icon name="plus" [size]="18" [stroke]="2.2" />{{ i18n.t('mgr.navNewOrder') }}</a>
           }
         </div>
 
-        <label class="search">
+        <label class="m-search search">
           <span class="sr-only">{{ i18n.t('mgr.searchOrders') }}</span>
-          <aon-icon name="search" [size]="21" [stroke]="1.8" class="search-icon" />
+          <aon-icon name="search" [size]="20" [stroke]="1.8" />
           <kbd class="kbd" aria-hidden="true">⌘K</kbd>
           <input #search type="search" autocomplete="off" [placeholder]="i18n.t(mode() === 'workers' ? 'mgr.filterTeam' : mode() === 'reviews' ? 'mgr.searchReports' : 'mgr.searchOrders')" [value]="store.query()" (input)="store.query.set($any($event.target).value)" />
         </label>
@@ -143,7 +153,7 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
             </p>
           }
           @if (data()) {
-            <div class="card">
+            <div #ordersCard class="card">
               <table class="tbl">
                 <thead>
                   <tr>
@@ -221,7 +231,7 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
                           @if (!row.pending) {
                             <button
                               type="button"
-                              class="del-btn"
+                              class="m-del"
                               [attr.aria-label]="i18n.t('mgr.deleteOrderAria', { code: row.order.code ?? row.order.title })"
                               [title]="i18n.t('op.deleteConfirm')"
                               (click)="$event.stopPropagation(); askDeleteRow(row)"
@@ -258,11 +268,16 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
               <nav class="pager" [attr.aria-label]="i18n.t('mgr.pagerLabel')">
                 <p class="pager-info">{{ i18n.t('mgr.pageOf', { from: pageFrom(), to: pageTo(), n: orderRows().length }) }}</p>
                 <div class="pager-btns">
-                  <button type="button" class="pg" [disabled]="page() === 0" [attr.aria-label]="i18n.t('mgr.prevPage')" (click)="page.set(page() - 1)"><aon-icon name="chevron-left" [size]="18" /></button>
-                  @for (n of pages(); track n) {
-                    <button type="button" class="pg" [class.is-on]="page() === n" [attr.aria-current]="page() === n ? 'page' : null" [attr.aria-label]="i18n.t('mgr.pageN', { n: n + 1 })" (click)="page.set(n)">{{ n + 1 }}</button>
+                  <button type="button" class="pg" [disabled]="currentPage() === 0" [attr.aria-label]="i18n.t('mgr.prevPage')" (click)="goPage(currentPage() - 1)"><aon-icon name="chevron-left" [size]="20" /></button>
+                  <span class="pg-now">{{ i18n.t('mgr.pageNofM', { n: currentPage() + 1, m: pageCount() }) }}</span>
+                  @for (item of pageItems(); track item.key) {
+                    @if (item.page === null) {
+                      <span class="pg-gap" aria-hidden="true">…</span>
+                    } @else {
+                      <button type="button" class="pg pg-num" [class.is-on]="currentPage() === item.page" [attr.aria-current]="currentPage() === item.page ? 'page' : null" [attr.aria-label]="i18n.t('mgr.pageN', { n: item.page + 1 })" (click)="goPage(item.page)">{{ item.page + 1 }}</button>
+                    }
                   }
-                  <button type="button" class="pg" [disabled]="page() >= pageCount() - 1" [attr.aria-label]="i18n.t('mgr.nextPage')" (click)="page.set(page() + 1)"><aon-icon name="chevron-right" [size]="18" /></button>
+                  <button type="button" class="pg" [disabled]="currentPage() >= pageCount() - 1" [attr.aria-label]="i18n.t('mgr.nextPage')" (click)="goPage(currentPage() + 1)"><aon-icon name="chevron-right" [size]="20" /></button>
                 </div>
               </nav>
             }
@@ -422,7 +437,7 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
     }
     .work {
       min-width: 0;
-      padding: 0.8rem 2.5rem 2rem;
+      padding: 0.8rem var(--m-gutter) 2rem;
     }
     @media (min-width: 1360px) {
       .page.has-inspector {
@@ -436,29 +451,6 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
       display: flex;
       align-items: center;
     }
-    .day {
-      position: relative;
-      display: inline-flex;
-      align-items: center;
-      gap: 0.75rem;
-      letter-spacing: -0.01em;
-      height: 2.6rem;
-      padding: 0 0.9rem;
-      border: 1px solid var(--color-line);
-      border-radius: 0.5rem;
-      background: var(--color-panel);
-      font-size: 1.13rem;
-      box-shadow: 0 1px 2px rgb(20 20 20 / 0.04);
-    }
-    .day:focus-within {
-      border-color: var(--color-gold);
-    }
-    .day input {
-      position: absolute;
-      inset: 0;
-      opacity: 0;
-      cursor: pointer;
-    }
     .titleline {
       display: flex;
       align-items: flex-end;
@@ -466,56 +458,8 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
       gap: 1rem;
       margin-top: 1.85rem;
     }
-    .title {
-      font-size: 2.09rem;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      line-height: 1.15;
-    }
-    .title-scope {
-      color: var(--color-text-muted);
-      font-weight: 500;
-    }
-    .new {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.45rem;
-      height: 2.5rem;
-      margin-right: 0.25rem;
-      padding: 0 1rem;
-      border-radius: 0.5rem;
-      background: var(--color-gold);
-      color: var(--color-charcoal);
-      font-weight: 600;
-      text-decoration: none;
-      box-shadow: 0 1px 2px rgb(20 20 20 / 0.12), inset 0 -2px 0 rgb(0 0 0 / 0.08);
-      transition: filter 160ms var(--ease-out-expo), transform 120ms var(--ease-out-expo);
-    }
-    .new:hover {
-      filter: brightness(1.04);
-    }
-    .new:active {
-      transform: translateY(1px);
-      box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.15);
-    }
     .search {
-      position: relative;
-      display: flex;
-      align-items: center;
-      height: 2.6rem;
       margin-top: 1.5rem;
-      border: 1px solid var(--color-line);
-      border-radius: 0.5rem;
-      background: var(--color-panel);
-      box-shadow: 0 1px 2px rgb(20 20 20 / 0.04);
-    }
-    .search:focus-within {
-      border-color: var(--color-gold);
-      box-shadow: 0 0 0 3px rgb(193 160 80 / 0.18);
-    }
-    .search-icon {
-      margin-left: 0.85rem;
-      color: var(--color-text-muted);
     }
     /* The shortcut hint only means something with a keyboard. */
     .kbd {
@@ -529,18 +473,6 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
       .kbd {
         display: inline;
       }
-    }
-    .search input {
-      flex: 1 1 auto;
-      min-width: 0;
-      height: 100%;
-      padding: 0 0.75rem 0 0.6rem;
-      background: transparent;
-      font-size: 1.13rem;
-      outline: none;
-    }
-    .search input::placeholder {
-      color: var(--color-text-muted);
     }
     .banner {
       display: flex;
@@ -590,10 +522,10 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
     }
     .scope-field select {
       width: 100%;
-      height: 2.85rem;
+      height: var(--m-tap);
       padding: 0 2.3rem 0 0.85rem;
-      border: 1px solid var(--color-line);
-      border-radius: 0.65rem;
+      border: 1px solid var(--color-line-strong);
+      border-radius: 0.5rem;
       background: var(--color-panel);
       color: var(--color-text-muted);
       font-weight: 500;
@@ -617,9 +549,9 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
       flex: 0 0 auto;
       align-items: center;
       gap: 0.35rem;
-      height: 2.85rem;
+      height: var(--m-tap);
       padding: 0 0.85rem;
-      border-radius: 0.65rem;
+      border-radius: 0.5rem;
       color: var(--color-text-muted);
       font-weight: 500;
       white-space: nowrap;
@@ -643,7 +575,6 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
       /* On a phone the pickers come first and the reset sits under them. */
       .reset {
         order: 1;
-        height: 2.5rem;
         padding: 0 0.5rem;
       }
       .scope-field {
@@ -657,6 +588,9 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
       background: var(--color-panel);
       box-shadow: 0 1px 2px rgb(20 20 20 / 0.04), 0 8px 24px -18px rgb(20 20 20 / 0.25);
       overflow: auto;
+      scroll-margin-top: 4.5rem;
+      /* The tables answer to their card's width, so they also fit beside the rail on a tablet. */
+      container-type: inline-size;
     }
     @media (min-width: 1360px) {
       .page.has-inspector .card {
@@ -677,12 +611,14 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
       table-layout: auto;
       min-width: 0;
     }
-    /* A narrow office screen scrolls the team table inside its card rather than hiding the last columns. */
-    .card:has(> .tbl-team) {
-      overflow-x: auto;
-    }
     .tbl-team td {
       white-space: nowrap;
+    }
+    .tbl-team .row td {
+      padding-inline: 0.7rem;
+    }
+    .tbl-team .th {
+      padding-inline: 0.7rem;
     }
     /* The object name may wrap so the report-state pill keeps its room. */
     .tbl-team td:nth-child(3) {
@@ -722,7 +658,6 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
     .c-code {
       /* The code never wraps into the title on a narrower office screen. */
       width: max(12%, 8.75rem);
-      padding-right: 1.5rem !important;
     }
     .c-title {
       width: 23%;
@@ -763,20 +698,28 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
       .where-inline {
         display: block;
       }
+      /* Code, status and progress keep the room their content needs; the names share the rest. */
+      .tbl:not(.tbl-team) .row td:not(.c-act),
+      .tbl:not(.tbl-team) .th {
+        padding-inline: 0.7rem;
+      }
       .c-code {
-        width: max(14.5%, 8.75rem);
+        width: 7.75rem;
       }
       .c-title {
-        width: 27%;
+        width: auto;
       }
-      .c-worker {
-        width: 25%;
+      .tbl .c-worker {
+        width: 26%;
       }
-      .c-status {
-        width: 14.5%;
+      .tbl .c-status {
+        width: 7.5rem;
+      }
+      .tbl .c-progress {
+        width: 8.5rem;
       }
       .tbl {
-        min-width: 38rem;
+        min-width: 0;
       }
     }
     .c-worker {
@@ -792,23 +735,23 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
       width: 12%;
     }
     .c-act {
-      width: 3.5rem;
+      width: 3.75rem;
     }
     .row td.c-act {
       padding: 0.4rem 0.6rem 0.4rem 0;
       text-align: right;
     }
-    .del-btn {
+    .m-del {
       display: inline-grid;
       place-items: center;
-      width: 2.5rem;
-      height: 2.5rem;
+      width: var(--m-tap);
+      height: var(--m-tap);
       border-radius: 0.5rem;
       color: var(--color-text-muted);
       transition: background-color 150ms var(--ease-out-expo), color 150ms var(--ease-out-expo);
     }
-    .del-btn:hover,
-    .del-btn:focus-visible {
+    .m-del:hover,
+    .m-del:focus-visible {
       background: var(--color-bad-tint);
       color: var(--color-bad-ink);
     }
@@ -962,7 +905,6 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
       justify-content: space-between;
       gap: 0.75rem;
       margin-top: 1rem;
-      padding-right: 1rem;
     }
     .pager-info {
       color: var(--color-text-muted);
@@ -970,21 +912,34 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
     }
     .pager-btns {
       display: flex;
+      flex-wrap: wrap;
+      align-items: center;
       gap: 0.35rem;
+      min-width: 0;
     }
     .pg {
       display: grid;
       place-items: center;
-      min-width: 2.4rem;
-      height: 2.4rem;
+      min-width: var(--m-tap);
+      height: var(--m-tap);
       padding: 0 0.5rem;
-      border: 1px solid var(--color-line);
-      border-radius: 0.45rem;
+      border: 1px solid var(--color-line-strong);
+      border-radius: 0.5rem;
       background: var(--color-panel);
       font-variant-numeric: tabular-nums;
     }
+    .pg-gap {
+      min-width: 1.25rem;
+      color: var(--color-text-muted);
+      text-align: center;
+    }
+    .pg-now {
+      display: none;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
     .pg:hover:not(:disabled) {
-      border-color: var(--color-line-strong);
+      background: var(--color-field);
     }
     .pg:disabled {
       opacity: 0.4;
@@ -1038,9 +993,33 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
         opacity: 0;
       }
     }
+    /* Phones: previous, where you are, next. The arrows are wide thumb targets and the row always fits. */
     @media (max-width: 600px) {
       .inspector {
         width: 100vw !important;
+      }
+      .pager {
+        flex-direction: column-reverse;
+        align-items: stretch;
+        gap: 0.5rem;
+      }
+      .pager-info {
+        font-size: 0.9rem;
+        text-align: center;
+      }
+      .pager-btns {
+        flex-wrap: nowrap;
+        justify-content: space-between;
+      }
+      .pg-num,
+      .pg-gap {
+        display: none;
+      }
+      .pg-now {
+        display: block;
+      }
+      .pg {
+        min-width: 5rem;
       }
     }
     .inspector {
@@ -1049,7 +1028,7 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
       right: 0;
       bottom: 0;
       z-index: 50;
-      width: min(var(--insp-w), 100vw);
+      width: min(26rem, 100vw);
       overflow-y: auto;
       border-left: 1px solid var(--color-line);
       background: var(--color-panel);
@@ -1080,8 +1059,8 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
         opacity: 0;
       }
     }
-    /* Phones: each order becomes a card, so nothing hides behind a sideways scroll. */
-    @media (max-width: 700px) {
+    /* A narrow card: each order becomes a card of its own, so nothing hides behind a sideways scroll. */
+    @container (max-width: 44rem) {
       .card:not(.skeleton) .tbl {
         min-width: 0;
         table-layout: auto;
@@ -1095,7 +1074,8 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
       }
       .row {
         display: grid !important;
-        grid-template-columns: 1fr auto;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        align-items: center;
         gap: 0.35rem 0.75rem;
         padding: 0.85rem 0.9rem;
         border-bottom: 1px solid var(--color-line);
@@ -1111,7 +1091,7 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
         font-weight: 600;
       }
       .row .c-status {
-        grid-column: 2;
+        grid-column: 2 / -1;
         grid-row: 1;
         justify-self: end;
       }
@@ -1134,32 +1114,79 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
         margin-left: auto;
       }
       .row td.c-act {
-        grid-column: 1 / -1;
-        justify-self: end;
-        margin: -0.25rem -0.4rem -0.4rem 0;
+        grid-column: 3;
+        margin: -0.35rem -0.5rem -0.35rem 0;
       }
-      .row.is-static td[data-label] > * {
-        text-align: right;
+    }
+    /* Team and report rows turn into cards as soon as the columns stop fitting their card. */
+    @container (max-width: 66rem) {
+      .tbl-team,
+      .tbl-team tbody,
+      .tbl-team tr {
+        display: block;
+        width: 100%;
       }
-      .row.is-static td {
-        grid-column: 1 / -1;
+      .tbl-team thead {
+        display: none;
       }
-      .row.is-static td[data-label] {
-        display: flex;
-        justify-content: space-between;
-        gap: 1rem;
+      .tbl-team .row {
+        display: grid !important;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        align-items: start;
+        gap: 0.7rem 1rem;
+        padding: 0.9rem 1rem;
+        border-bottom: 1px solid var(--color-line);
       }
-      .row.is-static td[data-label]::before {
+      .tbl-team .row:last-child {
+        border-bottom: 0;
+      }
+      .tbl-team .row td,
+      .tbl-team td:nth-child(3),
+      .tbl-team td:last-child {
+        display: block;
+        width: auto !important;
+        min-width: 0;
+        height: auto;
+        padding: 0 !important;
+        border: 0;
+        white-space: normal;
+      }
+      .tbl-team .row td[data-label]::before {
         content: attr(data-label);
+        display: block;
+        margin-bottom: 0.1rem;
         color: var(--color-text-muted);
+        font-size: 0.85rem;
+      }
+      .tbl-team .row.is-static td:first-child {
+        grid-column: span 3;
+      }
+      .tbl-team .row.is-static td:nth-child(2) {
+        justify-self: end;
+      }
+      .tbl-team .row:not(.is-static) td:first-child {
+        grid-column: 1 / -1;
+      }
+      .tbl-team .row.is-static td:nth-child(3) {
+        grid-column: span 2;
+      }
+    }
+    @container (max-width: 36rem) {
+      .tbl-team .row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .tbl-team .row.is-static td:first-child {
+        grid-column: span 1;
+      }
+      .tbl-team .row.is-static td:nth-child(3),
+      .tbl-team .row:not(.is-static) .codes {
+        grid-column: 1 / -1;
       }
     }
     @media (max-width: 900px) {
       .work {
-        padding: 0.75rem 0.9rem 1.5rem;
-      }
-      .title {
-        font-size: 1.6rem;
+        padding-top: 0.75rem;
+        padding-bottom: 1.5rem;
       }
     }
   `,
@@ -1170,6 +1197,7 @@ export class OverviewComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly searchEl = viewChild<ElementRef<HTMLInputElement>>('search');
+  private readonly ordersCard = viewChild<ElementRef<HTMLElement>>('ordersCard');
   private readonly network = inject(NetworkStatusService);
   private readonly toast = inject(ToastService);
 
@@ -1345,6 +1373,7 @@ export class OverviewComponent implements OnInit {
           doneQty: 0,
           estimatedMinutes: p.estimatedMinutes,
           materials: p.materials,
+          materialUsage: [],
           date: p.date,
           dueDate: p.dueDate,
           updatedAt: p.savedAt,
@@ -1419,13 +1448,27 @@ export class OverviewComponent implements OnInit {
 
   protected readonly page = signal(0);
   protected readonly pageCount = computed(() => Math.max(1, Math.ceil(this.orderRows().length / PAGE_SIZE)));
-  protected readonly pages = computed(() => Array.from({ length: this.pageCount() }, (_, i) => i));
+  protected readonly currentPage = computed(() => Math.min(this.page(), this.pageCount() - 1));
+  /** First, last and the pages around the current one, so the row stays the same size however many pages there are. */
+  protected readonly pageItems = computed<readonly PageItem[]>(() => {
+    const last = this.pageCount() - 1;
+    const now = this.currentPage();
+    const wanted = [...new Set([0, now - 1, now, now + 1, last])].filter((n) => n >= 0 && n <= last).sort((a, b) => a - b);
+    const items: PageItem[] = [];
+    wanted.forEach((n, i) => {
+      const prev = wanted[i - 1];
+      if (prev !== undefined && n - prev === 2) items.push({ key: `p${prev + 1}`, page: prev + 1 });
+      else if (prev !== undefined && n - prev > 2) items.push({ key: `gap${n}`, page: null });
+      items.push({ key: `p${n}`, page: n });
+    });
+    return items;
+  });
   protected readonly pageRows = computed(() => {
-    const p = Math.min(this.page(), this.pageCount() - 1);
+    const p = this.currentPage();
     return this.orderRows().slice(p * PAGE_SIZE, (p + 1) * PAGE_SIZE);
   });
-  protected readonly pageFrom = computed(() => Math.min(this.orderRows().length, Math.min(this.page(), this.pageCount() - 1) * PAGE_SIZE + 1));
-  protected readonly pageTo = computed(() => Math.min(this.orderRows().length, (Math.min(this.page(), this.pageCount() - 1) + 1) * PAGE_SIZE));
+  protected readonly pageFrom = computed(() => Math.min(this.orderRows().length, this.currentPage() * PAGE_SIZE + 1));
+  protected readonly pageTo = computed(() => Math.min(this.orderRows().length, (this.currentPage() + 1) * PAGE_SIZE));
 
   protected readonly workerRows = computed(() => {
     const words = this.words();
@@ -1558,12 +1601,23 @@ export class OverviewComponent implements OnInit {
     this.store.setDate(toIsoDate());
   }
 
-  protected onDate(event: Event): void {
-    const value = (event.target as HTMLInputElement).value;
+  protected stepDay(by: -1 | 1): void {
+    const next = addDays(this.store.date(), by);
+    if (next <= this.today) this.pickDay(next);
+  }
+
+  protected pickDay(value: string): void {
     if (isIsoDate(value)) {
       this.panel.set(null);
       this.store.setDate(value);
     }
+  }
+
+  /** The next page starts at its top: on a phone the pager sits a long way below the first row. */
+  protected goPage(n: number): void {
+    this.page.set(n);
+    const card = this.ordersCard()?.nativeElement;
+    if (card && card.getBoundingClientRect().top < 0) card.scrollIntoView();
   }
 
   protected sortBy(key: SortKey): void {
@@ -1626,16 +1680,6 @@ export class OverviewComponent implements OnInit {
     this.store.query.set('');
     if (!this.store.isToday()) this.toToday();
     if (this.site() || this.project()) this.scopeTo({});
-  }
-
-  /** The whole day button opens the calendar, not only the browser's small icon inside the hidden field. */
-  protected openCalendar(event: Event): void {
-    const input = event.target as HTMLInputElement & { showPicker?: () => void };
-    try {
-      input.showPicker?.();
-    } catch {
-      // Older browsers open it themselves, or not at all; the field still takes typing.
-    }
   }
 
   protected crew(names: readonly string[]): string {

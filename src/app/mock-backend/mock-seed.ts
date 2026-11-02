@@ -1,4 +1,4 @@
-import type { DailySummary, IsoDate, LogEntry, Material, Project, Site, TimeEntry } from '../core/models/domain.models';
+import type { DailySummary, IsoDate, LogEntry, Material, MaterialUsage, Project, Site, TimeEntry } from '../core/models/domain.models';
 import { toIsoDate } from '../core/util/util';
 import type { MockOrder, MockServerDb, MockUser } from './mock-db';
 
@@ -7,7 +7,7 @@ import type { MockOrder, MockServerDb, MockUser } from './mock-db';
  * "demo data" in the UI. No real personal data and no photos: photos come only from a device camera.
  */
 
-const SEED_VERSION = '13';
+const SEED_VERSION = '14';
 
 export const DEMO_WORKER_ID = 'u-luka';
 export const DEMO_MANAGER_ID = 'u-maja';
@@ -65,6 +65,7 @@ interface OrderSeed {
   readonly doneQty: number;
   readonly estimatedMinutes: number | null;
   readonly materials?: readonly Material[];
+  readonly materialUsage?: readonly MaterialUsage[];
   readonly date: IsoDate | null;
   readonly dueDate: IsoDate | null;
 }
@@ -92,6 +93,7 @@ function order(s: OrderSeed): MockOrder {
     doneQty: s.doneQty,
     estimatedMinutes: s.estimatedMinutes,
     materials: s.materials ?? [],
+    materialUsage: s.materialUsage ?? [],
     date: s.date,
     dueDate: s.dueDate,
     updatedAt: Date.now(),
@@ -127,10 +129,17 @@ export async function ensureSeeded(db: MockServerDb): Promise<void> {
       id: 'wo-125', code: '2026-00125', siteId: 's-hn', title: 'Montaža stenskih elementov',
       description: 'Montaža zunanjih stenskih elementov na severni strani objekta.',
       location: 'Severna stran objekta', crewIds: [DEMO_WORKER_ID], status: 'IN_PROGRESS',
-      unit: 'PCS', plannedQty: 8, doneQty: 5, estimatedMinutes: 480,
+      unit: 'PCS', plannedQty: 0, doneQty: 0, estimatedMinutes: 480,
       materials: [
-        { name: 'Stenski element tip A', qty: 10, unit: 'kos' },
+        { name: 'Stenski element tip A', qty: 8, unit: 'kos' },
         { name: 'Vijaki M8x120', qty: 200, unit: 'kos' },
+        { name: 'Tesnilni trak', qty: 40, unit: 'm' },
+      ],
+      materialUsage: [
+        { name: 'Stenski element tip A', unit: 'kos', qty: 5 },
+        { name: 'Vijaki M8x120', unit: 'kos', qty: 72 },
+        { name: 'Tesnilni trak', unit: 'm', qty: 44 },
+        { name: 'Silikon', unit: 'kos', qty: 2 },
       ],
       date: day(-2), dueDate: day(2),
     }),
@@ -250,8 +259,10 @@ export async function ensureSeeded(db: MockServerDb): Promise<void> {
   ];
 
   const logs: LogEntry[] = [
-    { id: 'l-125-1', userId: DEMO_WORKER_ID, workOrderId: 'wo-125', kind: 'QUANTITY', quantity: 2, text: null, createdAt: at(-2, 13, 55) },
-    { id: 'l-125-2', userId: DEMO_WORKER_ID, workOrderId: 'wo-125', kind: 'QUANTITY', quantity: 3, text: null, createdAt: at(-1, 11, 20) },
+    { id: 'l-125-m1', userId: DEMO_WORKER_ID, workOrderId: 'wo-125', kind: 'MATERIAL', quantity: 5, materialName: 'Stenski element tip A', materialUnit: 'kos', text: null, createdAt: at(-1, 10, 40) },
+    { id: 'l-125-m2', userId: DEMO_WORKER_ID, workOrderId: 'wo-125', kind: 'MATERIAL', quantity: 72, materialName: 'Vijaki M8x120', materialUnit: 'kos', text: null, createdAt: at(-1, 10, 45) },
+    { id: 'l-125-m3', userId: DEMO_WORKER_ID, workOrderId: 'wo-125', kind: 'MATERIAL', quantity: 44, materialName: 'Tesnilni trak', materialUnit: 'm', text: null, createdAt: at(-1, 10, 50) },
+    { id: 'l-125-m4', userId: DEMO_WORKER_ID, workOrderId: 'wo-125', kind: 'MATERIAL', quantity: 2, materialName: 'Silikon', materialUnit: 'kos', text: null, createdAt: at(-1, 10, 55) },
     { id: 'l-125-3', userId: DEMO_WORKER_ID, workOrderId: 'wo-125', kind: 'ISSUE', quantity: null, text: 'Manjka material: 2 kosa OSB plošče', createdAt: at(-1, 11, 25) },
     { id: 'l-124-1', userId: DEMO_WORKER_ID, workOrderId: 'wo-124', kind: 'QUANTITY', quantity: 90, text: null, createdAt: at(-2, 11, 15) },
     { id: 'l-129-1', userId: DEMO_WORKER_ID, workOrderId: 'wo-129', kind: 'QUANTITY', quantity: 96, text: null, createdAt: at(-3, 14, 50) },
@@ -336,7 +347,7 @@ export async function ensureSeeded(db: MockServerDb): Promise<void> {
       lines: [
         {
           workOrderId: 'wo-125', code: '2026-00125', title: 'Montaža stenskih elementov', siteName: 'Hiša Novak · Maribor',
-          minutes: 270, quantity: 3, unit: 'PCS',
+          minutes: 270, quantity: 0, unit: 'PCS',
           workDone: 'Montirani trije stenski elementi na severni strani, poravnani in sidrani.',
           materialsUsed: [{ name: 'Vijaki M8x120', qty: 72, unit: 'kos' }],
           issues: ['Manjka material: 2 kosa OSB plošče'], photoCount: 0,

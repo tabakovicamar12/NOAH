@@ -8,6 +8,7 @@ import { HoursData } from '../../core/worktime/hours-data.service';
 import { WORKTIME_RULES, analyzeMonth, hm, isMonth, shiftMonth, type WorkIssue, type WorkMonth } from '../../core/worktime/worktime';
 import { toIsoDate } from '../../core/util/util';
 import { IconComponent } from '../../shared/ui/icon.component';
+import { PeriodNavComponent } from '../../shared/ui/period-nav.component';
 import { avatarTone, initialsOf } from './person';
 
 interface Row {
@@ -27,20 +28,28 @@ const RANK = { over: 0, near: 1, note: 2, ok: 3 } as const;
  */
 @Component({
   selector: 'aon-manager-hours',
-  imports: [RouterLink, IconComponent],
+  imports: [RouterLink, IconComponent, PeriodNavComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="page">
+    <div class="page m-page">
       <header class="head">
         <div>
-          <h1 class="title">{{ i18n.t('hours.title') }}</h1>
+          <h1 class="m-title">{{ i18n.t('hours.title') }}</h1>
           <p class="sub">{{ i18n.t('hours.subtitle') }}</p>
         </div>
-        <div class="month" role="group" [attr.aria-label]="monthLabel()">
-          <button type="button" class="mbtn" [attr.aria-label]="i18n.t('hours.prevMonth')" (click)="go(-1)"><aon-icon name="chevron-left" [size]="18" /></button>
-          <span class="mlabel">{{ monthLabel() }}</span>
-          <button type="button" class="mbtn" [disabled]="isCurrent()" [attr.aria-label]="i18n.t('hours.nextMonth')" (click)="go(1)"><aon-icon name="chevron-right" [size]="18" /></button>
-        </div>
+        <aon-period-nav
+          kind="month"
+          [value]="month()"
+          [max]="thisMonth"
+          [label]="monthLabel()"
+          [groupLabel]="monthLabel()"
+          [prevLabel]="i18n.t('hours.prevMonth')"
+          [nextLabel]="i18n.t('hours.nextMonth')"
+          [pickLabel]="i18n.t('hours.pickMonth')"
+          [canNext]="!isCurrent()"
+          (stepped)="go($event)"
+          (picked)="pick($event)"
+        />
       </header>
 
       @switch (state().kind) {
@@ -80,7 +89,7 @@ const RANK = { over: 0, near: 1, note: 2, ok: 3 } as const;
             </div>
           </section>
 
-          <label class="search">
+          <label class="m-search search">
             <span class="sr-only">{{ i18n.t('hours.search') }}</span>
             <aon-icon name="search" [size]="18" [stroke]="1.8" />
             <input type="search" autocomplete="off" [placeholder]="i18n.t('hours.search')" [value]="query()" (input)="query.set($any($event.target).value)" />
@@ -162,7 +171,7 @@ const RANK = { over: 0, near: 1, note: 2, ok: 3 } as const;
     }
     .page {
       max-width: 82rem;
-      padding: 1.4rem 2rem 3rem;
+      padding-bottom: 3rem;
     }
     .head {
       display: flex;
@@ -171,43 +180,9 @@ const RANK = { over: 0, near: 1, note: 2, ok: 3 } as const;
       justify-content: space-between;
       gap: 0.75rem 1.5rem;
     }
-    .title {
-      font-size: clamp(1.6rem, 1.3rem + 1.2vw, 2.09rem);
-      font-weight: 600;
-      letter-spacing: -0.02em;
-    }
     .sub {
       margin-top: 0.15rem;
       color: var(--color-text-muted);
-    }
-    .month {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.25rem;
-      padding: 0.2rem;
-      border: 1px solid var(--color-line-strong);
-      border-radius: 0.6rem;
-      background: var(--color-panel);
-    }
-    .mbtn {
-      display: grid;
-      place-items: center;
-      width: 2.5rem;
-      height: 2.5rem;
-      border-radius: 0.45rem;
-      color: var(--color-text);
-    }
-    .mbtn:hover:not(:disabled) {
-      background: var(--color-field);
-    }
-    .mbtn:disabled {
-      opacity: 0.35;
-    }
-    .mlabel {
-      min-width: 9.5rem;
-      font-weight: 600;
-      text-align: center;
-      text-transform: capitalize;
     }
     .kpis {
       display: grid;
@@ -255,33 +230,14 @@ const RANK = { over: 0, near: 1, note: 2, ok: 3 } as const;
       color: #9a6a0c;
     }
     .search {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
       max-width: 26rem;
-      height: 2.75rem;
       margin-top: 1rem;
-      padding: 0 0.85rem;
-      border: 1px solid var(--color-line-strong);
-      border-radius: 0.6rem;
-      background: var(--color-panel);
-      color: var(--color-text-muted);
-    }
-    .search:focus-within {
-      border-color: var(--color-gold);
-      box-shadow: 0 0 0 3px rgb(193 160 80 / 0.18);
-    }
-    .search input {
-      flex: 1 1 auto;
-      min-width: 0;
-      height: 100%;
-      background: transparent;
-      color: var(--color-text);
-      outline: none;
     }
     .card {
       margin-top: 0.85rem;
       overflow: hidden;
+      /* The table answers to its card, so it also fits beside the rail on a narrow laptop or tablet. */
+      container-type: inline-size;
       border-radius: 0.85rem;
       background: var(--color-panel);
       box-shadow: 0 1px 2px rgb(20 20 20 / 0.05), 0 8px 22px -16px rgb(20 20 20 / 0.3);
@@ -494,9 +450,6 @@ const RANK = { over: 0, near: 1, note: 2, ok: 3 } as const;
       }
     }
     @media (max-width: 900px) {
-      .page {
-        padding: 0.9rem 0.9rem 2rem;
-      }
       .head {
         align-items: flex-start;
       }
@@ -513,8 +466,8 @@ const RANK = { over: 0, near: 1, note: 2, ok: 3 } as const;
         max-width: none;
       }
     }
-    /* Phones: each worker is a card; overtime gauges sit side by side. */
-    @media (max-width: 700px) {
+    /* A narrow card: each worker is a card of its own; overtime gauges sit side by side. */
+    @container (max-width: 46rem) {
       .tbl thead {
         display: none;
       }
@@ -584,7 +537,7 @@ export class HoursComponent {
   /** `?month=YYYY-MM`, bound by withComponentInputBinding. */
   readonly monthParam = input<string | undefined>(undefined, { alias: 'month' });
 
-  private readonly thisMonth = toIsoDate().slice(0, 7);
+  protected readonly thisMonth = toIsoDate().slice(0, 7);
   protected readonly month = computed(() => {
     const m = this.monthParam();
     return m && isMonth(m) && m <= this.thisMonth ? m : this.thisMonth;
@@ -660,6 +613,10 @@ export class HoursComponent {
   protected go(step: number): void {
     const next = shiftMonth(this.month(), step);
     void this.router.navigate([], { queryParams: { month: next === this.thisMonth ? null : next }, replaceUrl: true });
+  }
+
+  protected pick(value: string): void {
+    if (isMonth(value) && value <= this.thisMonth) void this.router.navigate([], { queryParams: { month: value === this.thisMonth ? null : value }, replaceUrl: true });
   }
 
   protected open(userId: string): void {
