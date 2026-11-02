@@ -505,12 +505,14 @@ function toLocalInput(ms: number): string {
     .col-list {
       display: contents;
     }
-    @media (min-width: 900px), (orientation: landscape) and (min-width: 640px) and (max-height: 520px) {
+    @media (min-width: 760px), (orientation: landscape) and (min-width: 640px) and (max-height: 520px) {
       .page {
         display: grid;
-        grid-template-columns: minmax(0, 25rem) minmax(0, 1fr);
-        gap: 0 1.75rem;
+        grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
+        gap: 0 1.25rem;
         align-items: start;
+        max-width: 96rem;
+        margin-inline: auto;
         padding: 1.25rem 1.5rem 0.5rem;
       }
       .col-lead {
@@ -529,10 +531,40 @@ function toLocalInput(ms: number): string {
         margin-top: 0.2rem;
       }
       .nexts {
-        grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(min(18rem, 100%), 1fr));
       }
       .scope {
         flex: 0 1 22rem;
+      }
+    }
+    @media (min-width: 1100px) {
+      .page {
+        grid-template-columns: minmax(0, 25rem) minmax(0, 1fr);
+        gap: 0 1.75rem;
+      }
+    }
+    /* The rail has no bar above the page, so the left column can ride right up to the top. */
+    :host-context(.is-rail) .col-lead {
+      top: 1.25rem;
+    }
+    @media (hover: hover) {
+      .nx:hover,
+      .row:hover {
+        background: var(--color-row-tint);
+      }
+      .nx.is-bad:hover {
+        background: var(--color-bad-tint);
+      }
+      .nx-go:not(.is-off, .is-bad, :disabled):hover {
+        filter: brightness(0.96);
+      }
+      .tile:hover,
+      .fold summary:hover,
+      .more button:hover {
+        background: var(--color-row-tint);
+      }
+      .plus:hover:not(:disabled) {
+        filter: brightness(1.04);
       }
     }
     /* A phone on its side: keep the clock and the order, drop the drawing and the notes. */
