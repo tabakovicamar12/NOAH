@@ -8,6 +8,7 @@ import type {
   AssignmentUpdate,
   ConsentRequest,
   IssueResolveRequest,
+  OrderStatusSetRequest,
   HoursResponse,
   LoginRequest,
   LoginResponse,
@@ -32,6 +33,8 @@ import type {
 import {
   CONSENT_VERSION,
   openIssueLogs,
+  canSetOrderStatus,
+  manualStatusLogKind,
   QUANTITY_UNITS,
   ROLES,
   applyMaterialUsage,
@@ -435,6 +438,23 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
       const at = requireNumber(body.resolvedAt, 'resolvedAt');
       await db.logs.put({ id: requireString(body.id, 'id'), userId: me.id, workOrderId: id, kind: 'RESOLVED', quantity: null, text, createdAt: at });
       await db.orders.put({ ...current, status: 'IN_PROGRESS', updatedAt: at });
+    });
+  }
+
+  if (method === 'POST' && segments[0] === 'work-orders' && segments[1] && segments[2] === 'set-status') {
+    const body = bodyAs<OrderStatusSetRequest>(req);
+    const id = segments[1];
+    return withIdempotency(db, req, async () => {
+      const current = await db.orders.get(id);
+      if (!current) throw new MockHttpError(404, 'Work order not found');
+      if (!canSetOrderStatus(me.role)) throw new MockHttpError(403, 'OUT_OF_SCOPE');
+      const kind = manualStatusLogKind(current.status, body.status);
+      if (!kind) throw new MockHttpError(409, 'STATUS_NOT_ALLOWED');
+      const text = requireString(body.text, 'text').trim();
+      if (!text) throw new MockHttpError(400, 'A reason is required');
+      const at = requireNumber(body.changedAt, 'changedAt');
+      await db.logs.put({ id: requireString(body.id, 'id'), userId: me.id, workOrderId: id, kind, quantity: null, text, createdAt: at });
+      await db.orders.put({ ...current, status: body.status, updatedAt: at });
     });
   }
 

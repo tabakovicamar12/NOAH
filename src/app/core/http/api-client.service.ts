@@ -29,6 +29,7 @@ import type {
   WorkOrderDetailResponse,
   WorkOrderStatusRequest,
   IssueResolveRequest,
+  OrderStatusSetRequest,
   WorkOrderUpsert,
   WorkerDayResponse,
   WorkerOrdersResponse,
@@ -84,6 +85,10 @@ export class ApiClient {
 
   resolveIssue(workOrderId: string, body: IssueResolveRequest, opId: string): Promise<void> {
     return this.mutate('POST', `/work-orders/${encodeURIComponent(workOrderId)}/resolve`, body, opId);
+  }
+
+  setOrderStatusByHand(workOrderId: string, body: OrderStatusSetRequest, opId: string): Promise<void> {
+    return this.mutate('POST', `/work-orders/${encodeURIComponent(workOrderId)}/set-status`, body, opId);
   }
 
   createLog(body: LogEntryCreate, opId: string): Promise<void> {

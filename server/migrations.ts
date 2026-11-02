@@ -313,6 +313,14 @@ alter table logs drop constraint if exists logs_kind_check;
 alter table logs add constraint logs_kind_check check (kind in ('QUANTITY', 'MATERIAL', 'NOTE', 'ISSUE', 'RESOLVED'));
 `,
   },
+  {
+    id: '014_manual_order_status',
+    // A status set by hand is recorded with its reason, next to the work it does not change.
+    sql: `
+alter table logs drop constraint if exists logs_kind_check;
+alter table logs add constraint logs_kind_check check (kind in ('QUANTITY', 'MATERIAL', 'NOTE', 'ISSUE', 'RESOLVED', 'CLOSED', 'REOPENED'));
+`,
+  },
 ];
 
 export async function migrate(db: Db, log: (msg: string) => void = () => undefined): Promise<string[]> {

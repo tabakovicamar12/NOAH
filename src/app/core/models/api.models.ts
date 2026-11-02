@@ -109,6 +109,14 @@ export interface IssueResolveRequest {
   readonly resolvedAt: number;
 }
 
+// POST /work-orders/:id/set-status (a manager sets the status by hand, always with a reason)
+export interface OrderStatusSetRequest {
+  readonly id: string;
+  readonly status: WorkOrderStatus;
+  readonly text: string;
+  readonly changedAt: number;
+}
+
 // POST /logs
 export type LogEntryCreate = LogEntry;
 

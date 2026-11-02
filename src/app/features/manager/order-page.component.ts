@@ -3,12 +3,13 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, si
 import { Router, RouterLink } from '@angular/router';
 import { I18nService } from '../../core/i18n/i18n.service';
 import { NetworkStatusService } from '../../core/network/network-status.service';
+import { SessionStore } from '../../core/auth/session.store';
 import { ToastService } from '../../core/ui/toast.service';
 import { ConfirmDeleteComponent } from '../../shared/ui/confirm-delete.component';
 import { OrgService } from '../../core/org/org.service';
 import type { TranslationKey } from '../../core/i18n/sl';
 import { ApiError, type PhotoView, type WorkOrderDetailResponse } from '../../core/models/api.models';
-import { openIssueLogs, PHOTO_CATEGORIES, materialLines, type LogEntry, type PhotoCategory, type TimeEntry, type WorkOrderStatus } from '../../core/models/domain.models';
+import { canSetOrderStatus, openIssueLogs, PHOTO_CATEGORIES, materialLines, type LogEntry, type PhotoCategory, type TimeEntry, type WorkOrderStatus } from '../../core/models/domain.models';
 import { ClockService } from '../../core/ui/clock.service';
 import { minutesBetween, toIsoDate } from '../../core/util/util';
 import { hm } from '../../core/worktime/worktime';
@@ -25,7 +26,7 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
 /** One line of the order's history: who did what, when. */
 interface OrderEvent {
   readonly at: number;
-  readonly kind: 'start' | 'stop' | 'qty' | 'mat' | 'fix' | 'note' | 'issue' | 'resolved' | 'photo';
+  readonly kind: 'start' | 'stop' | 'qty' | 'mat' | 'fix' | 'note' | 'issue' | 'resolved' | 'closed' | 'reopened' | 'photo';
   readonly userId: string;
   readonly text: string | null;
   readonly figure: string | null;
@@ -62,6 +63,16 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
           <div class="tools">
             <a class="m-btn m-btn-line" [routerLink]="['/m/orders', d.order.id, 'edit']"><aon-icon name="pencil" [size]="17" />{{ i18n.t('drill.edit') }}</a>
             <a class="m-btn m-btn-line" routerLink="/m/orders/new" [queryParams]="{ from: d.order.id }"><aon-icon name="copy" [size]="17" />{{ i18n.t('drill.duplicate') }}</a>
+            @if (canSetStatus() && d.order.published) {
+              @if (d.order.status === 'COMPLETED') {
+                <button type="button" class="m-btn m-btn-line" (click)="openStatus('IN_PROGRESS')"><aon-icon name="undo" [size]="17" />{{ i18n.t('op.setReopen') }}</button>
+              } @else {
+                @if (d.order.status !== 'ISSUE') {
+                  <button type="button" class="m-btn m-btn-line" (click)="openStatus('ISSUE')"><aon-icon name="alert" [size]="17" />{{ i18n.t('op.setIssue') }}</button>
+                }
+                <button type="button" class="m-btn m-btn-line" (click)="openStatus('COMPLETED')"><aon-icon name="circle-check" [size]="17" />{{ i18n.t('op.setCompleted') }}</button>
+              }
+            }
             @if (isAdmin()) {
               <button type="button" class="m-btn m-btn-danger" (click)="askDelete()"><aon-icon name="trash" [size]="17" />{{ i18n.t('op.delete') }}</button>
             }
@@ -94,6 +105,22 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
         @case ('READY') {
           @if (data(); as d) {
             @let o = d.order;
+            @if (statusTarget(); as target) {
+              <form class="set no-print" novalidate (submit)="$event.preventDefault(); saveStatus(o.id, target)">
+                <h2 class="set-h">{{ i18n.t(target === 'COMPLETED' ? 'op.setCompleted' : target === 'ISSUE' ? 'op.setIssue' : 'op.setReopen') }}</h2>
+                @if (target === 'COMPLETED' && runningNames().length) {
+                  <p class="set-warn"><aon-icon name="clock" [size]="17" />{{ i18n.t('op.setRunning', { names: runningNames().join(', ') }) }}</p>
+                }
+                <label>
+                  <span class="res-l">{{ i18n.t(target === 'ISSUE' ? 'op.setIssueLabel' : 'op.setReason') }}</span>
+                  <textarea rows="2" maxlength="2000" class="res-f" [value]="statusText()" (input)="statusText.set($any($event.target).value)"></textarea>
+                </label>
+                <div class="set-acts">
+                  <button type="submit" class="m-btn m-btn-dark" [disabled]="statusBusy()"><aon-icon name="check" [size]="18" [stroke]="2.5" />{{ i18n.t('op.setConfirm') }}</button>
+                  <button type="button" class="m-btn m-btn-line" (click)="statusTarget.set(null)">{{ i18n.t('common.cancel') }}</button>
+                </div>
+              </form>
+            }
             <!-- Head: number and job, where it stands, and the drawing of the site behind it. -->
             <header class="head">
               <img class="head-art no-print" src="/plates/home-drawing.jpg" alt="" width="1024" height="688" decoding="async" />
@@ -1134,6 +1161,36 @@ const PHOTO_ICON: Readonly<Record<PhotoCategory, IconName>> = { BEFORE: 'camera'
       background: var(--color-bad-tint);
       box-shadow: inset 0 0 0 1px var(--color-alert-line, #ef9a9a);
     }
+    .set {
+      display: grid;
+      gap: 0.6rem;
+      margin-bottom: 1rem;
+      padding: 1rem 1.1rem;
+      border-radius: 0.6rem;
+      background: var(--color-panel);
+      box-shadow: inset 0 0 0 1px var(--color-line-strong);
+    }
+    .set-h {
+      font-size: 1.05rem;
+      font-weight: 650;
+    }
+    .set-warn {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.45rem;
+      padding: 0.6rem 0.75rem;
+      border-radius: 0.5rem;
+      background: var(--color-gold-tint);
+      line-height: 1.4;
+    }
+    .set-warn aon-icon {
+      margin-top: 0.15rem;
+    }
+    .set-acts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
     .resolve {
       display: grid;
       gap: 0.6rem;
@@ -1954,6 +2011,7 @@ export class OrderPageComponent {
   protected readonly org = inject(OrgService);
   private readonly orgLoad = this.org.load();
   private readonly store = inject(ManagerStore);
+  private readonly session = inject(SessionStore);
   private readonly clock = inject(ClockService);
   private readonly document = inject(DOCUMENT);
   private readonly network = inject(NetworkStatusService);
@@ -2042,6 +2100,43 @@ export class OrderPageComponent {
     const d = this.data();
     return d ? openIssueLogs(d.order.status, d.logs).sort((a, b) => b.createdAt - a.createdAt) : [];
   });
+  // ---- status set by hand
+  protected readonly canSetStatus = computed(() => canSetOrderStatus(this.session.role()));
+  protected readonly statusTarget = signal<WorkOrderStatus | null>(null);
+  protected readonly statusText = signal('');
+  protected readonly statusBusy = signal(false);
+  /** Workers whose timer is running on this order: their time is theirs to stop. */
+  protected readonly runningNames = computed(() => [
+    ...new Set((this.data()?.timeEntries ?? []).filter((e) => e.kind === 'ORDER' && e.endedAt === null).map((e) => this.workerName(e.userId))),
+  ]);
+
+  protected openStatus(target: WorkOrderStatus): void {
+    this.statusText.set('');
+    this.statusTarget.set(target);
+  }
+
+  protected async saveStatus(orderId: string, target: WorkOrderStatus): Promise<void> {
+    const text = this.statusText().trim();
+    if (!text) {
+      this.toast.error(this.i18n.t('op.setRequired'));
+      return;
+    }
+    if (this.statusBusy()) return;
+    this.statusBusy.set(true);
+    try {
+      await this.store.setOrderStatus(orderId, target, text);
+      this.statusTarget.set(null);
+      this.statusText.set('');
+      this.toast.success(this.i18n.t('op.setDone', { status: this.i18n.t(this.statusKey(target)) }));
+      await this.load(orderId);
+    } catch (err: unknown) {
+      console.warn('[AON] setting the status failed', err);
+      this.toast.error(this.i18n.t('op.setFailed'));
+    } finally {
+      this.statusBusy.set(false);
+    }
+  }
+
   protected readonly resolveText = signal('');
   protected readonly resolving = signal(false);
 
@@ -2094,7 +2189,7 @@ export class OrderPageComponent {
         const q = l.quantity ?? 0;
         events.push({ at: l.createdAt, kind: q < 0 ? 'fix' : 'mat', userId: l.userId, text: l.text, figure: `${l.materialName ?? ''} ${q < 0 ? '−' : '+'}${this.i18n.number(Math.abs(q))} ${l.materialUnit ?? ''}`, photo: null });
       } else {
-        events.push({ at: l.createdAt, kind: l.kind === 'ISSUE' ? 'issue' : l.kind === 'RESOLVED' ? 'resolved' : 'note', userId: l.userId, text: l.text, figure: null, photo: null });
+        events.push({ at: l.createdAt, kind: l.kind === 'ISSUE' ? 'issue' : l.kind === 'RESOLVED' ? 'resolved' : l.kind === 'CLOSED' ? 'closed' : l.kind === 'REOPENED' ? 'reopened' : 'note', userId: l.userId, text: l.text, figure: null, photo: null });
       }
     }
     for (const p of d.photos) {
@@ -2295,7 +2390,7 @@ export class OrderPageComponent {
   }
 
   protected eventIcon(kind: OrderEvent["kind"]): IconName {
-    return ({ start: 'play', stop: 'stop', qty: 'plus', mat: 'package', fix: 'undo', note: 'note', issue: 'alert', resolved: 'check', photo: 'camera' } as const)[kind];
+    return ({ start: 'play', stop: 'stop', qty: 'plus', mat: 'package', fix: 'undo', note: 'note', issue: 'alert', resolved: 'check', closed: 'circle-check', reopened: 'undo', photo: 'camera' } as const)[kind];
   }
 
   protected eventLabel(e: OrderEvent): string {

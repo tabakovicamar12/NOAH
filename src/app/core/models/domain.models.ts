@@ -178,12 +178,25 @@ export interface TimeEntry {
   readonly endNote?: string | null;
 }
 
-export type LogEntryKind = 'QUANTITY' | 'MATERIAL' | 'NOTE' | 'ISSUE' | 'RESOLVED';
+export type LogEntryKind = 'QUANTITY' | 'MATERIAL' | 'NOTE' | 'ISSUE' | 'RESOLVED' | 'CLOSED' | 'REOPENED';
+
+/** Who may set an order's status by hand: administrators and managers, not foremen (who do not approve reports either). */
+export function canSetOrderStatus(role: Role | null | undefined): boolean {
+  return role === 'ADMIN' || role === 'MANAGER';
+}
+
+/** What a status set by hand is recorded as, or null when that change is not allowed. */
+export function manualStatusLogKind(from: WorkOrderStatus, to: WorkOrderStatus): 'CLOSED' | 'REOPENED' | 'ISSUE' | null {
+  if (to === 'COMPLETED') return from === 'COMPLETED' ? null : 'CLOSED';
+  if (to === 'IN_PROGRESS') return from === 'COMPLETED' ? 'REOPENED' : null;
+  if (to === 'ISSUE') return from === 'NEW' || from === 'IN_PROGRESS' ? 'ISSUE' : null;
+  return null;
+}
 
 /** Problems still open on an order: those reported after the last resolution, and only while it is flagged. */
 export function openIssueLogs<T extends { readonly kind: LogEntryKind; readonly createdAt: number }>(status: WorkOrderStatus, logs: readonly T[]): T[] {
   if (status !== 'ISSUE') return [];
-  const lastResolved = logs.reduce((at, l) => (l.kind === 'RESOLVED' && l.createdAt > at ? l.createdAt : at), 0);
+  const lastResolved = logs.reduce((at, l) => ((l.kind === 'RESOLVED' || l.kind === 'CLOSED') && l.createdAt > at ? l.createdAt : at), 0);
   return logs.filter((l) => l.kind === 'ISSUE' && l.createdAt > lastResolved);
 }
 

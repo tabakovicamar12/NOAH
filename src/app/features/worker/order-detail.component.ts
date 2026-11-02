@@ -260,6 +260,12 @@ type NoteMode = 'NOTE' | 'ISSUE';
                         @case ('RESOLVED') {
                           <span class="log-kind">{{ i18n.t('order.logResolved') }}</span>
                         }
+                        @case ('CLOSED') {
+                          <span class="log-kind">{{ i18n.t('order.logClosed') }}</span>
+                        }
+                        @case ('REOPENED') {
+                          <span class="log-kind">{{ i18n.t('order.logReopened') }}</span>
+                        }
                         @case ('ISSUE') {
                           <span class="log-kind is-bad">{{ i18n.t('order.logIssue') }}</span>
                         }
