@@ -32,6 +32,7 @@ import {
   CONSENT_VERSION,
   QUANTITY_UNITS,
   ROLES,
+  applyMaterialUsage,
   canApproveReports,
   isDeskRole,
   type DailySummary,
@@ -45,7 +46,6 @@ import {
   type WorkOrder,
   type WorkOrderStatus,
 } from '../core/models/domain.models';
-import { applyMaterialUsage } from '../core/models/domain.models';
 import { compareCodes, isIsoDate, minutesBetween, toIsoDate } from '../core/util/util';
 import { isMonth, monthOf, monthWindow } from '../core/worktime/worktime';
 import { houseModel } from '../core/models/house-catalog';

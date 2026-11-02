@@ -1222,8 +1222,6 @@ export class OverviewComponent implements OnInit {
   protected readonly sort = signal<{ key: SortKey; dir: 1 | -1 }>({ key: 'code', dir: 1 });
   protected readonly panel = signal<Panel | null>(null);
   private readonly docked = signal(false);
-  /** The manager closed the inspector on purpose; do not reopen it on the next data refresh. */
-  private userClosed = false;
 
   protected readonly tabs: ReadonlyArray<{ id: StatusTab; label: TranslationKey }> = [
     { id: 'ALL', label: 'mgr.tabAll' },
@@ -1639,7 +1637,6 @@ export class OverviewComponent implements OnInit {
   }
 
   protected closePanel(): void {
-    this.userClosed = true;
     this.panel.set(null);
     if (this.review()) void this.router.navigate(['/m']);
   }

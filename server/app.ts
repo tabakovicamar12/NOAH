@@ -37,18 +37,19 @@ import {
   PHOTO_CATEGORIES,
   QUANTITY_UNITS,
   ROLES,
+  applyMaterialUsage,
   canApproveReports,
   isDeskRole,
   type CrewMember,
   type DailySummary,
   type IsoDate,
   type LogEntry,
+  type MaterialUsage,
   type PhotoMeta,
   type Role,
   type TimeEntry,
   type WorkOrderStatus,
 } from '../src/app/core/models/domain.models';
-import { applyMaterialUsage, type MaterialUsage } from '../src/app/core/models/domain.models';
 import { houseModel } from '../src/app/core/models/house-catalog';
 import { LoginThrottle, hashPassword, issueToken, readFileKey, readToken, verifyPassword } from './auth';
 import type { ServerConfig } from './config';
@@ -234,15 +235,15 @@ function today(): IsoDate {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` as IsoDate;
 }
 
-/**
- * Runs a mutation exactly once per Idempotency-Key. The key is claimed inside the same transaction as
- * the change, so a failed mutation leaves the key free for the device's retry.
- */
 function toMaterialUsage(raw: unknown): MaterialUsage[] {
   const value: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
   return Array.isArray(value) ? (value as MaterialUsage[]) : [];
 }
 
+/**
+ * Runs a mutation exactly once per Idempotency-Key. The key is claimed inside the same transaction as
+ * the change, so a failed mutation leaves the key free for the device's retry.
+ */
 async function idempotent(c: Context<Env>, fn: (db: Db) => Promise<void>): Promise<Response> {
   const key = c.req.header('Idempotency-Key');
   if (!key || key.length > 100) throw new HttpError(400, 'Idempotency-Key header required');

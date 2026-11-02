@@ -448,7 +448,6 @@ export class WorkerStore {
     this.sync.nudge();
   }
 
-  /** Any crew member may finish the order for the whole crew; it stops only their own timer. */
   /** Whether this worker's timer is on this order. Everything written on an order needs it. */
   isRunning(orderId: string): boolean {
     return this.activeSegment()?.workOrderId === orderId;
@@ -458,6 +457,7 @@ export class WorkerStore {
     if (!this.isRunning(orderId)) throw new WorkflowError('ORDER_NOT_STARTED');
   }
 
+  /** Any crew member working on the order may finish it for the whole crew; it stops only their own timer. */
   async finishOrder(orderId: string): Promise<void> {
     const uid = this.requireUid();
     if (this.dayClosed()) throw new WorkflowError('DAY_CLOSED');
