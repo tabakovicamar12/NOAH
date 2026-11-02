@@ -102,6 +102,13 @@ export interface WorkOrderStatusRequest {
   readonly changedAt: number;
 }
 
+// POST /work-orders/:id/resolve (a manager closes a reported problem; the note stays in the order's history)
+export interface IssueResolveRequest {
+  readonly id: string;
+  readonly text: string;
+  readonly resolvedAt: number;
+}
+
 // POST /logs
 export type LogEntryCreate = LogEntry;
 
@@ -339,6 +346,8 @@ export interface WorkOrderDetailResponse {
   readonly order: WorkOrder;
   /** Crew members with recorded time: they stay on the order. */
   readonly lockedCrewIds: readonly string[];
+  /** Names behind the entries, also of people outside the crew, such as a manager who closed a problem. */
+  readonly userNames?: Readonly<Record<string, string>>;
   readonly timeEntries: readonly TimeEntry[];
   readonly logs: readonly LogEntry[];
   readonly photos: readonly PhotoView[];

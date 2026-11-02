@@ -194,6 +194,9 @@ type DrillState = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { 
                             } @else if (l.kind === 'MATERIAL') {
                               <span class="row-main">{{ i18n.t('mat.logAdd', { name: l.materialName ?? '', q: i18n.number(l.quantity ?? 0), unit: l.materialUnit ?? '' }) }}</span>
                             }
+                            @if (l.kind === 'RESOLVED') {
+                              <span class="row-main">{{ i18n.t('order.logResolved') }}</span>
+                            }
                             @if (l.text) {
                               <span class="row-text">{{ l.text }}</span>
                             }

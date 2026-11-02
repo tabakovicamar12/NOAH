@@ -178,7 +178,14 @@ export interface TimeEntry {
   readonly endNote?: string | null;
 }
 
-export type LogEntryKind = 'QUANTITY' | 'MATERIAL' | 'NOTE' | 'ISSUE';
+export type LogEntryKind = 'QUANTITY' | 'MATERIAL' | 'NOTE' | 'ISSUE' | 'RESOLVED';
+
+/** Problems still open on an order: those reported after the last resolution, and only while it is flagged. */
+export function openIssueLogs<T extends { readonly kind: LogEntryKind; readonly createdAt: number }>(status: WorkOrderStatus, logs: readonly T[]): T[] {
+  if (status !== 'ISSUE') return [];
+  const lastResolved = logs.reduce((at, l) => (l.kind === 'RESOLVED' && l.createdAt > at ? l.createdAt : at), 0);
+  return logs.filter((l) => l.kind === 'ISSUE' && l.createdAt > lastResolved);
+}
 
 export interface LogEntry {
   readonly id: string;

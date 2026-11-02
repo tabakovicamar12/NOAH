@@ -7,6 +7,7 @@ import type {
   AdminUserUpdate,
   AssignmentUpdate,
   ConsentRequest,
+  IssueResolveRequest,
   HoursResponse,
   LoginRequest,
   LoginResponse,
@@ -30,6 +31,7 @@ import type {
 } from '../core/models/api.models';
 import {
   CONSENT_VERSION,
+  openIssueLogs,
   QUANTITY_UNITS,
   ROLES,
   applyMaterialUsage,
@@ -420,6 +422,22 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
     });
   }
 
+  if (method === 'POST' && segments[0] === 'work-orders' && segments[1] && segments[2] === 'resolve') {
+    const body = bodyAs<IssueResolveRequest>(req);
+    const id = segments[1];
+    return withIdempotency(db, req, async () => {
+      const current = await db.orders.get(id);
+      if (!current) throw new MockHttpError(404, 'Work order not found');
+      if (me.role === 'WORKER') throw new MockHttpError(403, 'OUT_OF_SCOPE');
+      if (current.status !== 'ISSUE') throw new MockHttpError(409, 'NOT_ISSUE');
+      const text = requireString(body.text, 'text').trim();
+      if (!text) throw new MockHttpError(400, 'A resolution needs a note');
+      const at = requireNumber(body.resolvedAt, 'resolvedAt');
+      await db.logs.put({ id: requireString(body.id, 'id'), userId: me.id, workOrderId: id, kind: 'RESOLVED', quantity: null, text, createdAt: at });
+      await db.orders.put({ ...current, status: 'IN_PROGRESS', updatedAt: at });
+    });
+  }
+
   if (method === 'POST' && path === '/logs') {
     const body = bodyAs<LogEntry>(req);
     return withIdempotency(db, req, async () => {
@@ -607,7 +625,7 @@ async function route(req: HttpRequest<unknown>): Promise<unknown> {
             unit: o.unit,
             minutesTotal: entries.filter((e) => e.kind === 'ORDER' && e.workOrderId === o.id).reduce((m, e) => m + entryMinutes(e, now), 0),
             dueDate: o.dueDate,
-            openIssues: o.status === 'ISSUE' ? Math.max(1, logs.filter((l) => l.workOrderId === o.id && l.kind === 'ISSUE').length) : 0,
+            openIssues: o.status === 'ISSUE' ? Math.max(1, openIssueLogs(o.status, logs.filter((l) => l.workOrderId === o.id)).length) : 0,
           })),
       })),
       serverTime: now,
@@ -922,7 +940,7 @@ async function overview(db: MockServerDb, date: IsoDate): Promise<ManagerOvervie
         o.dueDate === date,
       minutesTotal: segs.reduce((s, e) => s + entryMinutes(e, now), 0),
       photoCount: photos.filter((p) => p.workOrderId === o.id).length,
-      openIssues: o.status === 'ISSUE' ? Math.max(1, logs.filter((l) => l.workOrderId === o.id && l.kind === 'ISSUE').length) : 0,
+      openIssues: o.status === 'ISSUE' ? Math.max(1, openIssueLogs(o.status, logs.filter((l) => l.workOrderId === o.id)).length) : 0,
     };
   });
 
@@ -945,6 +963,7 @@ async function orderDetail(db: MockServerDb, id: string): Promise<WorkOrderDetai
     lockedCrewIds: [...new Set(timeEntries.map((e) => e.userId))],
     timeEntries: timeEntries.sort((a, b) => b.startedAt - a.startedAt),
     logs: logs.sort((a, b) => b.createdAt - a.createdAt),
+    userNames: Object.fromEntries((await db.users.toArray()).map((u) => [u.id, u.displayName])),
     photos: photoViews(photos, userById),
     summaries: summaries
       .filter((s) => (order.code ? s.ordersWorked.includes(order.code) : false) || s.lines.some((l) => l.workOrderId === id))

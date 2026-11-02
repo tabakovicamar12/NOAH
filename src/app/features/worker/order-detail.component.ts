@@ -85,6 +85,12 @@ type NoteMode = 'NOTE' | 'ISSUE';
             } @else {
               @if (o.status === 'ISSUE') {
                 <p class="w-alert"><aon-icon name="alert" [size]="18" />{{ i18n.t('order.issueNote') }}</p>
+                @if (!running()) {
+                  <label class="block">
+                    <span class="w-label">{{ i18n.t('order.resolveLabel') }}</span>
+                    <textarea rows="2" maxlength="2000" class="w-field" [placeholder]="i18n.t('order.resolvePlaceholder')" [value]="resolveNote()" (input)="resolveNote.set($any($event.target).value)"></textarea>
+                  </label>
+                }
               }
               @if (running()) {
                 <button type="button" class="pause" [disabled]="busy()" (click)="pause()"><aon-icon name="pause" [size]="18" [stroke]="2.25" />{{ i18n.t('order.pauseOrder') }}</button>
@@ -250,6 +256,9 @@ type NoteMode = 'NOTE' | 'ISSUE';
                           } @else {
                             <span class="block font-semibold">{{ i18n.t('mat.logAdd', { name: l.materialName ?? '', q: i18n.number(l.quantity ?? 0), unit: l.materialUnit ?? '' }) }}</span>
                           }
+                        }
+                        @case ('RESOLVED') {
+                          <span class="log-kind">{{ i18n.t('order.logResolved') }}</span>
                         }
                         @case ('ISSUE') {
                           <span class="log-kind is-bad">{{ i18n.t('order.logIssue') }}</span>
@@ -603,8 +612,21 @@ export class OrderDetailComponent {
     if (!hasQuantity(o)) return `${this.elapsed()} · ${this.i18n.t('photo.count', { n: photos })}`;
     return `${this.i18n.t('order.progress', { done: this.i18n.number(o.doneQty), planned: this.i18n.number(o.plannedQty), unit: this.unitLabel() })} · ${this.i18n.t('photo.count', { n: photos })}`;
   });
+  /** What was done about a reported problem; asked before work on the order goes on. */
+  protected readonly resolveNote = signal('');
   protected primary(): Promise<void> {
+    if (this.order()?.status === 'ISSUE' && !this.resolveNote().trim()) {
+      this.toast.error(this.i18n.t('order.resolveRequired'));
+      return Promise.resolve();
+    }
     return this.store.openShift() ? this.start() : this.startShiftAndOrder();
+  }
+  /** The note to close the problem with, once; empty on an order without one. */
+  private takeResolution(): string | undefined {
+    if (this.order()?.status !== 'ISSUE') return undefined;
+    const note = this.resolveNote();
+    this.resolveNote.set('');
+    return note;
   }
   /** Slide-to-confirm, as on the home screen: released past 92 % runs the action. */
   private readonly slides = signal<Record<string, number>>({});
@@ -656,7 +678,7 @@ export class OrderDetailComponent {
 
   protected start(): Promise<void> {
     return this.run(async () => {
-      await this.store.startOrder(this.id());
+      await this.store.startOrder(this.id(), this.takeResolution());
       this.toast.success(this.i18n.t('order.startedToast', { code: this.order()?.code ?? '' }));
     });
   }
@@ -665,7 +687,7 @@ export class OrderDetailComponent {
     return this.run(async () => {
       // The order's own object is the obvious choice; the worker is not asked again.
       await this.store.startShift(this.order()?.siteId ?? (await this.store.chooseSite()) ?? null);
-      await this.store.startOrder(this.id());
+      await this.store.startOrder(this.id(), this.takeResolution());
       this.toast.success(this.i18n.t('order.startedToast', { code: this.order()?.code ?? '' }));
     });
   }

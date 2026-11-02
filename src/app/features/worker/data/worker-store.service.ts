@@ -406,7 +406,8 @@ export class WorkerStore {
 
   // ---------- work orders ----------
 
-  async startOrder(orderId: string): Promise<void> {
+  /** `resolution` closes a reported problem: it says what was done, and stays in the order's history. */
+  async startOrder(orderId: string, resolution?: string): Promise<void> {
     const uid = this.requireUid();
     if (this.dayClosed()) throw new WorkflowError('DAY_CLOSED');
     // A shift started a moment ago is on the device already, even if the live signal has not caught up yet.
@@ -430,8 +431,14 @@ export class WorkerStore {
       endedAt: null,
       synced: 0,
     };
-    await this.db.transaction('rw', [this.db.timeEntries, this.db.workOrders, this.db.syncQueue], async () => {
+    const note = resolution?.trim();
+    const resolved = note ? this.newLog(uid, orderId, 'RESOLVED', null, note.slice(0, 2000)) : null;
+    await this.db.transaction('rw', [this.db.logs, this.db.timeEntries, this.db.workOrders, this.db.syncQueue], async () => {
       if (current) await this.closeEntry(uid, current, now);
+      if (resolved) {
+        await this.db.logs.add(resolved);
+        await this.db.syncQueue.add(queueItem(uid, entityKeys.log(resolved.id), { type: 'LOG_CREATE', payload: stripLocal(resolved) }));
+      }
       await this.db.timeEntries.add(segment);
       await this.db.syncQueue.add(queueItem(uid, entityKeys.timeEntry(segment.id), { type: 'TIME_ENTRY_UPSERT', payload: stripLocal(segment) }));
       if (order.status !== 'IN_PROGRESS') await this.setStatus(uid, order, 'IN_PROGRESS', now);

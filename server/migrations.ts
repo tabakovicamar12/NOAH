@@ -305,6 +305,14 @@ alter table logs drop constraint if exists logs_kind_check;
 alter table logs add constraint logs_kind_check check (kind in ('QUANTITY', 'MATERIAL', 'NOTE', 'ISSUE'));
 `,
   },
+  {
+    id: '013_issue_resolution',
+    // A reported problem is closed by a note saying how it was resolved; the report itself stays in the history.
+    sql: `
+alter table logs drop constraint if exists logs_kind_check;
+alter table logs add constraint logs_kind_check check (kind in ('QUANTITY', 'MATERIAL', 'NOTE', 'ISSUE', 'RESOLVED'));
+`,
+  },
 ];
 
 export async function migrate(db: Db, log: (msg: string) => void = () => undefined): Promise<string[]> {
