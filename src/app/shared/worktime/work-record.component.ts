@@ -4,7 +4,7 @@ import { OrgService } from '../../core/org/org.service';
 import type { TranslationKey } from '../../core/i18n/sl';
 import type { HoursResponse } from '../../core/models/api.models';
 import type { DailySummary, IsoDate, User } from '../../core/models/domain.models';
-import { WORKTIME_RULES, analyzeMonth, hm, monthDays, weekday, type WorkDay, type WorkIssue, type WorkMonth } from '../../core/worktime/worktime';
+import { analyzeMonth, hm, monthDays, weekday, type WorkDay, type WorkMonth } from '../../core/worktime/worktime';
 import { LogoComponent } from '../ui/logo.component';
 
 interface DayRow {
@@ -13,7 +13,6 @@ interface DayRow {
   readonly day: WorkDay | null;
   readonly orders: string;
   readonly report: DailySummary['status'] | null;
-  readonly flagged: boolean;
 }
 
 interface WeekRow {
@@ -24,14 +23,6 @@ interface WeekRow {
 }
 
 type Line = { readonly kind: 'day'; readonly row: DayRow } | { readonly kind: 'week'; readonly row: WeekRow };
-
-interface Check {
-  readonly rule: TranslationKey;
-  readonly article: number;
-  readonly limit: string;
-  readonly actual: string;
-  readonly level: 'ok' | 'near' | 'over' | 'none';
-}
 
 /** ISO 8601 week number of a YYYY-MM-DD date. */
 function isoWeek(date: string): number {
@@ -46,8 +37,9 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
 
 /**
  * One worker's monthly record of working time as an A4 sheet: every day of the month with arrival, departure,
- * regular time, overtime and the rest before it, weekly subtotals, a check against the ZDR-1 limits and lines
- * to sign. Print-to-PDF keeps it exact; on a phone the day table scrolls sideways.
+ * regular time, overtime and the rest before it, weekly subtotals and lines to sign. A plain sheet to print and
+ * sign: legal limits are checked for the manager on the Delovni čas page, not here. Print-to-PDF keeps it exact;
+ * on a phone the day table scrolls sideways.
  */
 @Component({
   selector: 'aon-work-record',
@@ -59,7 +51,6 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
         <header class="rec-head">
           <div class="rec-brand">
             <aon-logo [size]="1.15" />
-            <p class="rec-kicker">{{ i18n.t('rec.basis') }}</p>
           </div>
           <div class="rec-titleblock">
             <h1 class="rec-title">{{ i18n.t('rec.title') }}</h1>
@@ -89,17 +80,13 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
             <p class="fig-v num">{{ hm(m().regular) }}<span class="fig-u">h</span></p>
             <p class="fig-s">8 h / {{ i18n.t('mgr.colDay').toLowerCase() }} · 40 h / 7</p>
           </div>
-          <div class="fig" [attr.data-level]="levelOf(m().overtime, R.overtimeMonthMin)">
+          <div class="fig">
             <p class="fig-k">{{ i18n.t('rec.sumOvertime') }}</p>
             <p class="fig-v num">{{ hm(m().overtime) }}<span class="fig-u">h</span></p>
-            <span class="meter" aria-hidden="true"><span [style.width.%]="share(m().overtime, R.overtimeMonthMin)"></span></span>
-            <p class="fig-s">{{ i18n.t('rec.ofLimit', { limit: R.overtimeMonthMin / 60 }) }}</p>
           </div>
-          <div class="fig" [attr.data-level]="levelOf(m().overtimeYear, R.overtimeYearMin)">
+          <div class="fig">
             <p class="fig-k">{{ i18n.t('rec.sumYear') }}</p>
             <p class="fig-v num">{{ hm(m().overtimeYear) }}<span class="fig-u">h</span></p>
-            <span class="meter" aria-hidden="true"><span [style.width.%]="share(m().overtimeYear, R.overtimeYearMin)"></span></span>
-            <p class="fig-s">{{ i18n.t('rec.ofLimit', { limit: R.overtimeYearMin / 60 }) }}</p>
           </div>
         </section>
 
@@ -124,7 +111,7 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
                 @for (line of lines(); track $index) {
                   @if (line.kind === 'day') {
                     @let r = line.row;
-                    <tr class="d" [class.we]="r.weekend" [class.off]="!r.day" [class.flag]="r.flagged">
+                    <tr class="d" [class.we]="r.weekend" [class.off]="!r.day">
                       <th scope="row" class="dt">{{ dayLabel(r.date) }}</th>
                       @if (r.day; as d) {
                         <td class="r num">{{ i18n.time(d.firstStart) }}</td>
@@ -135,10 +122,10 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
                             <span class="muted">{{ i18n.t('rec.running') }}</span>
                           }
                         </td>
-                        <td class="r num strong" [class.bad]="d.minutes > R.maxDayMin">{{ hm(d.minutes) }}</td>
+                        <td class="r num strong">{{ hm(d.minutes) }}</td>
                         <td class="r num">{{ hm(d.regular) }}</td>
                         <td class="r num" [class.ot]="d.overtime > 0">{{ d.overtime ? hm(d.overtime) : '–' }}</td>
-                        <td class="r num" [class.bad]="d.restBefore !== null && d.restBefore < R.dailyRestMin">{{ d.restBefore === null ? '–' : restLabel(d.restBefore) }}</td>
+                        <td class="r num">{{ d.restBefore === null ? '–' : restLabel(d.restBefore) }}</td>
                         <td class="orders">{{ r.orders || '–' }}</td>
                         <td class="rep">{{ r.report ? i18n.t(reportKey(r.report)) : '–' }}</td>
                       } @else {
@@ -152,9 +139,9 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
                     <tr class="wk">
                       <th scope="row">{{ i18n.t('rec.week', { n: w.n }) }}</th>
                       <td colspan="2" class="r muted nowrap">{{ w.longestRest === null ? '' : i18n.t('rec.weekRest', { h: h(w.longestRest) }) }}</td>
-                      <td class="r num strong" [class.bad]="w.minutes > R.maxWeekMin">{{ hm(w.minutes) }}</td>
+                      <td class="r num strong">{{ hm(w.minutes) }}</td>
                       <td class="r num">{{ hm(w.minutes - w.overtime) }}</td>
-                      <td class="r num" [class.ot]="w.overtime > 0" [class.bad]="w.overtime > R.overtimeWeekMin">{{ w.overtime ? hm(w.overtime) : '–' }}</td>
+                      <td class="r num" [class.ot]="w.overtime > 0">{{ w.overtime ? hm(w.overtime) : '–' }}</td>
                       <td colspan="3"></td>
                     </tr>
                   }
@@ -174,55 +161,8 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
           </div>
         </section>
 
-        <section class="rec-sec keep">
-          <h2 class="rec-h">{{ i18n.t('rec.checkTitle') }}</h2>
-          <div class="scroll">
-            <table class="checks">
-              <thead>
-                <tr>
-                  <th scope="col">{{ i18n.t('rec.checkRule') }}</th>
-                  <th scope="col">{{ i18n.t('rec.checkBasis') }}</th>
-                  <th scope="col" class="r">{{ i18n.t('rec.checkLimit') }}</th>
-                  <th scope="col" class="r">{{ i18n.t('rec.checkActual') }}</th>
-                  <th scope="col">{{ i18n.t('rec.checkResult') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (c of checks(); track c.rule) {
-                  <tr>
-                    <th scope="row">{{ i18n.t(c.rule) }}</th>
-                    <td class="muted">{{ i18n.t('rec.article', { n: c.article }) }}</td>
-                    <td class="r num">{{ c.limit }}</td>
-                    <td class="r num strong">{{ c.actual }}</td>
-                    <td><span class="res" [attr.data-level]="c.level">{{ resultLabel(c.level) }}</span></td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section class="rec-sec keep">
-          <h2 class="rec-h">{{ i18n.t('rec.findings') }}</h2>
-          @if (m().issues.length) {
-            <ol class="finds">
-              @for (i of m().issues; track $index) {
-                <li [attr.data-level]="i.level">
-                  <span class="f-date num">{{ issueDate(i) }}</span>
-                  <span>{{ issueText(i) }}</span>
-                </li>
-              }
-            </ol>
-          } @else {
-            <p class="none">{{ i18n.t('rec.noFindings') }}</p>
-          }
-        </section>
-
         <section class="rec-notes keep">
-          <h2 class="rec-h small">{{ i18n.t('rec.notes') }}</h2>
           <p>{{ i18n.t('rec.note1') }}</p>
-          <p>{{ i18n.t('rec.note2') }}</p>
-          <p>{{ i18n.t('rec.note3') }}</p>
         </section>
 
         <section class="sign keep">
@@ -258,9 +198,6 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       --muted: #6a6862;
       --gold: #a8873a;
       --gold-fill: #f3ead3;
-      --bad: #b3121b;
-      --bad-fill: #fbe5e6;
-      --ok: #1d6b38;
     }
     .rec {
       font-size: 9.5pt;
@@ -288,13 +225,6 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       gap: calc(0.75 * var(--doc-u)) calc(2 * var(--doc-u));
       padding-bottom: calc(0.7 * var(--doc-u));
       border-bottom: 2.5px solid var(--rule);
-    }
-    .rec-kicker {
-      margin-top: calc(0.35 * var(--doc-u));
-      color: var(--muted);
-      font-size: 7.5pt;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
     }
     .rec-titleblock {
       text-align: right;
@@ -331,8 +261,7 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
     }
     .rec-meta dt,
     .fig-k,
-    .days thead th,
-    .checks thead th {
+    .days thead th {
       color: var(--muted);
       font-size: 7pt;
       font-weight: 600;
@@ -343,7 +272,7 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       margin-top: calc(0.1 * var(--doc-u));
       white-space: nowrap;
     }
-    /* Key figures: four cells, the overtime ones with a meter against the legal cap. */
+    /* Key figures: four cells. */
     .rec-figs {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -375,28 +304,6 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       color: var(--muted);
       font-size: 7.5pt;
     }
-    .meter {
-      display: block;
-      height: 4px;
-      margin-top: calc(0.35 * var(--doc-u));
-      border-radius: 2px;
-      background: var(--soft);
-      overflow: hidden;
-    }
-    .meter > span {
-      display: block;
-      height: 100%;
-      background: var(--gold);
-    }
-    .fig[data-level='near'] .meter > span {
-      background: #c98a12;
-    }
-    .fig[data-level='over'] .meter > span {
-      background: var(--bad);
-    }
-    .fig[data-level='over'] .fig-v {
-      color: var(--bad);
-    }
     .rec-sec {
       margin-top: calc(1.1 * var(--doc-u));
     }
@@ -404,9 +311,6 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       margin-bottom: calc(0.3 * var(--doc-u));
       font-size: 10.5pt;
       font-weight: 650;
-    }
-    .rec-h.small {
-      font-size: 8.5pt;
     }
     .scroll {
       overflow-x: auto;
@@ -420,19 +324,15 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       font-size: 8.4pt;
     }
     .days th,
-    .days td,
-    .checks th,
-    .checks td {
+    .days td {
       padding: calc(0.2 * var(--doc-u)) calc(0.4 * var(--doc-u));
       text-align: left;
       vertical-align: baseline;
     }
-    .days .r,
-    .checks .r {
+    .days .r {
       text-align: right;
     }
-    .days thead th,
-    .checks thead th {
+    .days thead th {
       padding-top: calc(0.35 * var(--doc-u));
       padding-bottom: calc(0.35 * var(--doc-u));
       border-bottom: 1.5px solid var(--rule);
@@ -458,17 +358,9 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       color: var(--muted);
       font-weight: 400;
     }
-    .d.flag .dt {
-      box-shadow: inset 2px 0 0 var(--bad);
-      padding-left: calc(0.35 * var(--doc-u));
-    }
     td.ot {
       color: #7a5d17;
       font-weight: 600;
-    }
-    td.bad {
-      color: var(--bad);
-      font-weight: 700;
     }
     .plus {
       margin-left: 1px;
@@ -477,7 +369,6 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
     }
     .star {
       margin-left: 1px;
-      color: var(--bad);
       font-weight: 700;
     }
     .nowrap {
@@ -511,84 +402,12 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
     .days tfoot td {
       padding-top: calc(0.35 * var(--doc-u));
     }
-    .checks {
-      min-width: calc(34 * var(--doc-u));
-      font-size: 8.6pt;
-    }
-    .checks tbody tr {
-      border-bottom: 1px solid #eeece6;
-    }
-    .checks tbody th {
-      padding-left: 0;
-      font-weight: 500;
-    }
-    .checks thead th:first-child {
-      padding-left: 0;
-    }
-    .res {
-      display: inline-flex;
-      align-items: center;
-      gap: calc(0.3 * var(--doc-u));
-      font-weight: 650;
-      white-space: nowrap;
-    }
-    .res::before {
-      content: '';
-      width: calc(0.5 * var(--doc-u));
-      height: calc(0.5 * var(--doc-u));
-      border-radius: 9999px;
-      background: currentColor;
-    }
-    .res[data-level='ok'] {
-      color: var(--ok);
-    }
-    .res[data-level='near'] {
-      color: #9a6a0c;
-    }
-    .res[data-level='over'] {
-      color: var(--bad);
-    }
-    .res[data-level='none'] {
-      color: var(--muted);
-      font-weight: 500;
-    }
-    .finds {
-      display: grid;
-      gap: calc(0.15 * var(--doc-u));
-      font-size: 8.8pt;
-    }
-    .finds li {
-      display: grid;
-      grid-template-columns: calc(6.5 * var(--doc-u)) minmax(0, 1fr);
-      gap: calc(0.75 * var(--doc-u));
-      padding: calc(0.25 * var(--doc-u)) calc(0.5 * var(--doc-u));
-      border-left: 3px solid var(--hair);
-    }
-    .finds li[data-level='over'] {
-      border-left-color: var(--bad);
-      background: var(--bad-fill);
-    }
-    .finds li[data-level='near'] {
-      border-left-color: #c98a12;
-      background: #fbf1dc;
-    }
-    .f-date {
-      color: var(--muted);
-      white-space: nowrap;
-    }
-    .none {
-      color: var(--ok);
-      font-weight: 600;
-    }
     .rec-notes {
       margin-top: calc(1.1 * var(--doc-u));
       padding-top: calc(0.6 * var(--doc-u));
       border-top: 1px solid var(--hair);
       color: var(--muted);
       font-size: 7.6pt;
-    }
-    .rec-notes p + p {
-      margin-top: calc(0.15 * var(--doc-u));
     }
     .sign {
       display: grid;
@@ -667,9 +486,46 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       .scroll {
         overflow: visible;
       }
-      .days,
-      .checks {
+      /* One A4 sheet to sign, also in a month with every week filled in. */
+      .days {
         min-width: 0;
+        font-size: 8pt;
+        line-height: 1.15;
+      }
+      .days th,
+      .days td {
+        padding-block: 1.5px;
+      }
+      .days thead th {
+        padding-block: 3px;
+      }
+      .wk {
+        font-size: 7.6pt;
+      }
+      .rec-figs {
+        margin-top: 8px;
+      }
+      .fig {
+        padding-block: 5px;
+      }
+      .fig-v {
+        font-size: 14pt;
+      }
+      .rec-sec {
+        margin-top: 8px;
+      }
+      .rec-notes {
+        margin-top: 8px;
+        padding-top: 4px;
+      }
+      .sign {
+        margin-top: 12px;
+      }
+      .sign .line {
+        height: 26px;
+      }
+      .rec-foot {
+        margin-top: 8px;
       }
     }
   `,
@@ -678,7 +534,6 @@ export class WorkRecordComponent {
   protected readonly i18n = inject(I18nService);
   protected readonly org = inject(OrgService);
   private readonly orgLoad = this.org.load();
-  protected readonly R = WORKTIME_RULES;
   protected readonly hm = hm;
   protected readonly h = h;
 
@@ -715,7 +570,6 @@ export class WorkRecordComponent {
     const data = this.data();
     const uid = this.userId();
     const byDate = new Map(month.days.map((d) => [d.date, d]));
-    const flagged = new Set(month.issues.filter((i) => i.level === 'over' && (i.kind === 'DAY_OVER' || i.kind === 'REST_DAILY' || i.kind === 'OPEN_LONG')).map((i) => i.date));
     const orderById = new Map(data.orders.map((o) => [o.id, o]));
     const reports = new Map(data.summaries.filter((s) => s.userId === uid).map((s) => [s.date, s.status]));
     const codesBy = new Map<string, Set<string>>();
@@ -739,7 +593,6 @@ export class WorkRecordComponent {
           day: byDate.get(date) ?? null,
           orders: this.codes([...(codesBy.get(date) ?? [])].filter(Boolean)),
           report: reports.get(date) ?? null,
-          flagged: flagged.has(date),
         },
       });
       if (wd === 6 || i === days.length - 1) {
@@ -749,31 +602,6 @@ export class WorkRecordComponent {
       }
     });
     return out;
-  });
-
-  protected readonly checks = computed<Check[]>(() => {
-    const m = this.m();
-    const R = this.R;
-    const worked = m.weeks.filter((w) => w.minutes > 0);
-    const rests = m.days.map((d) => d.restBefore).filter((r): r is number => r !== null);
-    const weekRests = worked.map((w) => w.longestRest).filter((r): r is number => r !== null);
-    const maxWeek = Math.max(0, ...worked.map((w) => w.minutes));
-    const maxWeekOt = Math.max(0, ...worked.map((w) => w.overtime));
-    const atMost = (min: number): string => this.i18n.t('rec.atMost', { h: min / 60 });
-    const atLeast = (min: number): string => this.i18n.t('rec.atLeast', { h: min / 60 });
-    const cap = (value: number, limit: number): Check['level'] => (value > limit ? 'over' : value >= limit * R.warnShare && limit >= R.overtimeMonthMin ? 'near' : 'ok');
-    const floor = (value: number | null, limit: number): Check['level'] => (value === null ? 'none' : value < limit ? 'over' : 'ok');
-    const minRest = rests.length ? Math.min(...rests) : null;
-    const minWeekRest = weekRests.length ? Math.min(...weekRests) : null;
-    return [
-      { rule: 'rec.rule.day', article: 144, limit: atMost(R.maxDayMin), actual: `${hm(m.longestDay)} h`, level: m.days.length ? cap(m.longestDay, R.maxDayMin) : 'none' },
-      { rule: 'rec.rule.week', article: 148, limit: atMost(R.maxWeekMin), actual: `${hm(maxWeek)} h`, level: worked.length ? cap(maxWeek, R.maxWeekMin) : 'none' },
-      { rule: 'rec.rule.otWeek', article: 144, limit: atMost(R.overtimeWeekMin), actual: `${hm(maxWeekOt)} h`, level: worked.length ? cap(maxWeekOt, R.overtimeWeekMin) : 'none' },
-      { rule: 'rec.rule.otMonth', article: 144, limit: atMost(R.overtimeMonthMin), actual: `${hm(m.overtime)} h`, level: cap(m.overtime, R.overtimeMonthMin) },
-      { rule: 'rec.rule.otYear', article: 144, limit: atMost(R.overtimeYearMin), actual: `${hm(m.overtimeYear)} h`, level: cap(m.overtimeYear, R.overtimeYearMin) },
-      { rule: 'rec.rule.restDaily', article: 155, limit: atLeast(R.dailyRestMin), actual: minRest === null ? '–' : `${h(minRest)} h`, level: floor(minRest, R.dailyRestMin) },
-      { rule: 'rec.rule.restWeekly', article: 156, limit: atLeast(R.weeklyRestMin), actual: minWeekRest === null ? '–' : `${h(minWeekRest)} h`, level: floor(minWeekRest, R.weeklyRestMin) },
-    ];
   });
 
   protected dayLabel(date: IsoDate): string {
@@ -798,27 +626,5 @@ export class WorkRecordComponent {
 
   protected reportKey(status: string): TranslationKey {
     return `reports.status${status}` as TranslationKey;
-  }
-
-  protected levelOf(value: number, limit: number): 'ok' | 'near' | 'over' {
-    return value > limit ? 'over' : value >= limit * this.R.warnShare ? 'near' : 'ok';
-  }
-
-  protected share(value: number, limit: number): number {
-    return Math.min(100, (value / limit) * 100);
-  }
-
-  protected resultLabel(level: Check['level']): string {
-    return level === 'none' ? '–' : this.i18n.t(level === 'ok' ? 'hours.ok' : level === 'near' ? 'hours.near' : 'hours.over');
-  }
-
-  protected issueDate(i: WorkIssue): string {
-    if (i.kind === 'OT_MONTH' || i.kind === 'OT_MONTH_NEAR' || i.kind === 'OT_YEAR' || i.kind === 'OT_YEAR_NEAR') return this.monthLabel();
-    if (i.kind === 'WEEK_OVER' || i.kind === 'OT_WEEK' || i.kind === 'REST_WEEKLY') return this.i18n.t('rec.week', { n: isoWeek(i.date) });
-    return this.dayLabel(i.date);
-  }
-
-  protected issueText(i: WorkIssue): string {
-    return this.i18n.t(`hours.issue.${i.kind}` as TranslationKey, { value: h(i.value), limit: i.limit / 60 });
   }
 }
