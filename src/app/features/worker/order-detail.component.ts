@@ -92,14 +92,14 @@ type NoteMode = 'NOTE' | 'ISSUE';
                 <div class="slide" #trkGo>
                   <span class="slide-fill" [style.width.%]="slidePos('go') * 100" aria-hidden="true"></span>
                   <span class="slide-text" aria-hidden="true"><span class="slide-l">{{ primaryLabel() }}</span><span class="slide-h">{{ i18n.t('home.slideHint') }}</span></span>
-                  <button type="button" class="knob" [class.is-drag]="dragKey() === 'go'" [style.transform]="'translateX(' + slidePos('go') * (trkGo.clientWidth - 64) + 'px)'" [attr.aria-label]="primaryLabel()" (pointerdown)="slideDown($event, trkGo, 'go')" (pointermove)="slideMove($event)" (pointerup)="slideUp()" (pointercancel)="slideCancel()" (keydown.enter)="primary()"><aon-icon name="play" [size]="22" [stroke]="2.5" /></button>
+                  <button type="button" class="knob" [class.is-drag]="dragKey() === 'go'" [style.transform]="'translateX(' + slidePos('go') * (trkGo.clientWidth - trkGo.clientHeight) + 'px)'" [attr.aria-label]="primaryLabel()" (pointerdown)="slideDown($event, trkGo, 'go')" (pointermove)="slideMove($event)" (pointerup)="slideUp()" (pointercancel)="slideCancel()" (keydown.enter)="primary()"><aon-icon name="play" [size]="22" [stroke]="2.5" /></button>
                 </div>
               }
               @if (canFinishNow()) {
                 <div class="slide is-dark" #trkEnd>
                   <span class="slide-fill" [style.width.%]="slidePos('end') * 100" aria-hidden="true"></span>
                   <span class="slide-text" aria-hidden="true"><span class="slide-l">{{ i18n.t('order.finishOrder') }}</span><span class="slide-h">{{ finishSummary() }}</span></span>
-                  <button type="button" class="knob" [class.is-drag]="dragKey() === 'end'" [style.transform]="'translateX(' + slidePos('end') * (trkEnd.clientWidth - 64) + 'px)'" [attr.aria-label]="i18n.t('order.finishOrder')" (pointerdown)="slideDown($event, trkEnd, 'end')" (pointermove)="slideMove($event)" (pointerup)="slideUp()" (pointercancel)="slideCancel()" (keydown.enter)="finish()"><aon-icon name="stop" [size]="22" [stroke]="2.5" /></button>
+                  <button type="button" class="knob" [class.is-drag]="dragKey() === 'end'" [style.transform]="'translateX(' + slidePos('end') * (trkEnd.clientWidth - trkEnd.clientHeight) + 'px)'" [attr.aria-label]="i18n.t('order.finishOrder')" (pointerdown)="slideDown($event, trkEnd, 'end')" (pointermove)="slideMove($event)" (pointerup)="slideUp()" (pointercancel)="slideCancel()" (keydown.enter)="finish()"><aon-icon name="stop" [size]="22" [stroke]="2.5" /></button>
                 </div>
                 @if (crewmates().length) {
                   <p class="note">{{ i18n.t('order.finishCrewHint') }}</p>
@@ -439,7 +439,7 @@ type NoteMode = 'NOTE' | 'ISSUE';
       position: relative;
       display: flex;
       align-items: center;
-      height: 64px;
+      height: max(64px, 4rem);
       padding: 4px;
       overflow: hidden;
       border-radius: 9999px;
@@ -483,8 +483,8 @@ type NoteMode = 'NOTE' | 'ISSUE';
       z-index: 1;
       display: grid;
       place-items: center;
-      width: 56px;
-      height: 56px;
+      width: calc(max(64px, 4rem) - 8px);
+      height: calc(max(64px, 4rem) - 8px);
       border-radius: 9999px;
       background: var(--color-charcoal);
       color: var(--color-gold);
@@ -619,7 +619,7 @@ export class OrderDetailComponent {
   protected slideDown(e: PointerEvent, track: HTMLElement, key: string): void {
     if (this.busy() || e.button !== 0) return;
     (e.currentTarget as HTMLElement | null)?.setPointerCapture?.(e.pointerId);
-    const travel = Math.max(1, track.clientWidth - 64);
+    const travel = Math.max(1, track.clientWidth - track.clientHeight);
     this.drag = { key, startX: e.clientX - this.slidePos(key) * travel, travel };
     this.dragKey.set(key);
   }

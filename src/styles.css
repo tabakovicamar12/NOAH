@@ -839,6 +839,37 @@
 html.mgr-scale {
   font-size: clamp(15px, calc(12px + 0.28vw), 17px);
 }
+/* Big monitors: past about 1920x1080 the whole app grows with the screen, up to 24px on a 4K screen at 100 %. The height
+   counts too, so an ultrawide of 3440x1440 reads like 2560x1440. Phones, tablets and laptops stay as they are. */
+@media screen {
+  html {
+    --big-screen-root: min(calc(10px + 0.365vw), calc(10px + 0.649vh));
+    font-size: max(100%, var(--big-screen-root));
+  }
+  html.mgr-scale {
+    font-size: max(clamp(15px, calc(12px + 0.28vw), 17px), var(--big-screen-root));
+  }
+}
+/* The printable sheets are drawn in mm and pt so they print true, and their spacing in --doc-u stays with them: it stops
+   following the root past 17px, otherwise a big monitor would push the columns off the page. Their preview zooms instead. */
+:root {
+  --doc-u: 1rem;
+}
+@media screen {
+  :root {
+    --doc-u: min(1rem, 17px);
+  }
+}
+@media screen and (min-width: 2400px) and (min-height: 1300px) {
+  .mgr-ui .paper {
+    zoom: 1.2;
+  }
+}
+@media screen and (min-width: 3400px) and (min-height: 1900px) {
+  .mgr-ui .paper {
+    zoom: 1.5;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -975,6 +1006,8 @@ html.mgr-scale {
   --m-gutter: clamp(0.9rem, 2.4vw, 2rem);
 }
 .m-page {
+  max-width: 120rem;
+  margin-inline: auto;
   padding-top: 1.25rem;
   padding-inline: var(--m-gutter);
 }

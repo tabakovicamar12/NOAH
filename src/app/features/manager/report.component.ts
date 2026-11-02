@@ -366,12 +366,12 @@ const R = WORKTIME_RULES;
       flex-wrap: wrap;
       align-items: flex-end;
       justify-content: space-between;
-      gap: 0.75rem 2rem;
-      padding-bottom: 0.7rem;
+      gap: calc(0.75 * var(--doc-u)) calc(2 * var(--doc-u));
+      padding-bottom: calc(0.7 * var(--doc-u));
       border-bottom: 2.5px solid var(--rule);
     }
     .kicker {
-      margin-top: 0.35rem;
+      margin-top: calc(0.35 * var(--doc-u));
       color: var(--muted);
       font-size: 7.5pt;
       letter-spacing: 0.06em;
@@ -387,7 +387,7 @@ const R = WORKTIME_RULES;
       line-height: 1.1;
     }
     .s-date {
-      margin-top: 0.15rem;
+      margin-top: calc(0.15 * var(--doc-u));
       color: var(--gold);
       font-size: 11pt;
       font-weight: 600;
@@ -401,10 +401,10 @@ const R = WORKTIME_RULES;
       border-bottom: 1px solid var(--hair);
     }
     .meta > div {
-      padding: 0.55rem 0.7rem 0.55rem 0;
+      padding: calc(0.55 * var(--doc-u)) calc(0.7 * var(--doc-u)) calc(0.55 * var(--doc-u)) 0;
     }
     .meta > div + div {
-      padding-left: 0.7rem;
+      padding-left: calc(0.7 * var(--doc-u));
       border-left: 1px solid var(--hair);
     }
     .meta dt,
@@ -417,12 +417,12 @@ const R = WORKTIME_RULES;
       text-transform: uppercase;
     }
     .meta dd {
-      margin-top: 0.1rem;
+      margin-top: calc(0.1 * var(--doc-u));
     }
     .demo {
       display: inline-block;
-      margin-top: 0.5rem;
-      padding: 0.1rem 0.5rem;
+      margin-top: calc(0.5 * var(--doc-u));
+      padding: calc(0.1 * var(--doc-u)) calc(0.5 * var(--doc-u));
       border: 1px dashed var(--rule);
       font-size: 7.5pt;
       font-weight: 600;
@@ -431,25 +431,25 @@ const R = WORKTIME_RULES;
     .figs {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
-      margin-top: 0.9rem;
+      margin-top: calc(0.9 * var(--doc-u));
       border: 1px solid var(--hair);
       border-radius: 4px;
     }
     .fig {
-      padding: 0.6rem 0.75rem 0.65rem;
+      padding: calc(0.6 * var(--doc-u)) calc(0.75 * var(--doc-u)) calc(0.65 * var(--doc-u));
     }
     .fig + .fig {
       border-left: 1px solid var(--hair);
     }
     .fig-v {
-      margin-top: 0.15rem;
+      margin-top: calc(0.15 * var(--doc-u));
       font-size: 16pt;
       font-weight: 650;
       letter-spacing: -0.02em;
       line-height: 1.05;
     }
     .fig-u {
-      margin-left: 0.2rem;
+      margin-left: calc(0.2 * var(--doc-u));
       color: var(--muted);
       font-size: 9pt;
       font-weight: 500;
@@ -461,10 +461,10 @@ const R = WORKTIME_RULES;
       color: var(--bad);
     }
     .sec {
-      margin-top: 1.15rem;
+      margin-top: calc(1.15 * var(--doc-u));
     }
     .h {
-      margin-bottom: 0.3rem;
+      margin-bottom: calc(0.3 * var(--doc-u));
       font-size: 10.5pt;
       font-weight: 650;
     }
@@ -473,13 +473,13 @@ const R = WORKTIME_RULES;
     }
     .t {
       width: 100%;
-      min-width: 38rem;
+      min-width: calc(38 * var(--doc-u));
       border-collapse: collapse;
       font-size: 8.6pt;
     }
     .t th,
     .t td {
-      padding: 0.28rem 0.45rem;
+      padding: calc(0.28 * var(--doc-u)) calc(0.45 * var(--doc-u));
       text-align: left;
       vertical-align: baseline;
     }
@@ -488,11 +488,11 @@ const R = WORKTIME_RULES;
     }
     /* A left-aligned column right after a right-aligned one gets air, so their dashes do not run together. */
     .t .r + :not(.r) {
-      padding-left: 1.1rem;
+      padding-left: calc(1.1 * var(--doc-u));
     }
     .t thead th {
-      padding-top: 0.35rem;
-      padding-bottom: 0.35rem;
+      padding-top: calc(0.35 * var(--doc-u));
+      padding-bottom: calc(0.35 * var(--doc-u));
       border-bottom: 1.5px solid var(--rule);
       white-space: nowrap;
     }
@@ -513,7 +513,7 @@ const R = WORKTIME_RULES;
     }
     .t tbody tr.flag th {
       box-shadow: inset 2px 0 0 var(--bad);
-      padding-left: 0.35rem;
+      padding-left: calc(0.35 * var(--doc-u));
     }
     .t tfoot tr {
       border-top: 2px solid var(--rule);
@@ -534,13 +534,13 @@ const R = WORKTIME_RULES;
     .st {
       display: inline-flex;
       align-items: center;
-      gap: 0.3rem;
+      gap: calc(0.3 * var(--doc-u));
       white-space: nowrap;
     }
     .st::before {
       content: '';
-      width: 0.45rem;
-      height: 0.45rem;
+      width: calc(0.45 * var(--doc-u));
+      height: calc(0.45 * var(--doc-u));
       border-radius: 9999px;
       background: #8e96a6;
     }
@@ -560,9 +560,9 @@ const R = WORKTIME_RULES;
     .pbar {
       display: block;
       width: 100%;
-      min-width: 4rem;
+      min-width: calc(4 * var(--doc-u));
       height: 3px;
-      margin-top: 0.2rem;
+      margin-top: calc(0.2 * var(--doc-u));
       border-radius: 2px;
       background: var(--soft);
       overflow: hidden;
@@ -573,8 +573,8 @@ const R = WORKTIME_RULES;
       background: var(--gold);
     }
     .flagnote {
-      margin-top: 0.3rem;
-      padding-left: 0.4rem;
+      margin-top: calc(0.3 * var(--doc-u));
+      padding-left: calc(0.4 * var(--doc-u));
       border-left: 2px solid var(--bad);
       color: var(--bad);
       font-size: 7.6pt;
@@ -588,22 +588,22 @@ const R = WORKTIME_RULES;
     }
     .issues {
       display: grid;
-      gap: 0.35rem;
+      gap: calc(0.35 * var(--doc-u));
       font-size: 8.8pt;
     }
     .issues li {
-      padding: 0.35rem 0.6rem;
+      padding: calc(0.35 * var(--doc-u)) calc(0.6 * var(--doc-u));
       border-left: 3px solid var(--bad);
       background: #fbe5e6;
       break-inside: avoid;
     }
     .log {
-      margin-top: 0.1rem;
+      margin-top: calc(0.1 * var(--doc-u));
       font-size: 8.4pt;
     }
     .legend {
-      margin-top: 1.1rem;
-      padding-top: 0.6rem;
+      margin-top: calc(1.1 * var(--doc-u));
+      padding-top: calc(0.6 * var(--doc-u));
       border-top: 1px solid var(--hair);
       color: var(--muted);
       font-size: 7.6pt;
@@ -611,25 +611,25 @@ const R = WORKTIME_RULES;
     .sign {
       display: grid;
       grid-template-columns: 2fr 1fr;
-      gap: 2rem;
-      margin-top: 2.2rem;
+      gap: calc(2 * var(--doc-u));
+      margin-top: calc(2.2 * var(--doc-u));
     }
     .sign .line {
       display: block;
-      height: 2.2rem;
+      height: calc(2.2 * var(--doc-u));
       border-bottom: 1px solid var(--rule);
     }
     .sign p {
-      margin-top: 0.25rem;
+      margin-top: calc(0.25 * var(--doc-u));
       color: var(--muted);
       font-size: 7.5pt;
     }
     .s-foot {
       display: flex;
       justify-content: space-between;
-      gap: 1rem;
-      margin-top: 1.4rem;
-      padding-top: 0.35rem;
+      gap: calc(1 * var(--doc-u));
+      margin-top: calc(1.4 * var(--doc-u));
+      padding-top: calc(0.35 * var(--doc-u));
       border-top: 1px solid var(--hair);
       color: var(--muted);
       font-size: 7pt;
@@ -640,7 +640,7 @@ const R = WORKTIME_RULES;
     @media (max-width: 700px) {
       .bar {
         position: static;
-        padding: 0.6rem 0.9rem;
+        padding: calc(0.6 * var(--doc-u)) calc(0.9 * var(--doc-u));
       }
       .bar-sub {
         display: none;
@@ -650,10 +650,10 @@ const R = WORKTIME_RULES;
         width: 100%;
       }
       .stage {
-        padding: 0.75rem 0.5rem 2rem;
+        padding: calc(0.75 * var(--doc-u)) calc(0.5 * var(--doc-u)) calc(2 * var(--doc-u));
       }
       .paper {
-        padding: 1rem 0.9rem 1.25rem;
+        padding: calc(1 * var(--doc-u)) calc(0.9 * var(--doc-u)) calc(1.25 * var(--doc-u));
       }
       .s-titleblock {
         text-align: left;
@@ -663,7 +663,7 @@ const R = WORKTIME_RULES;
       }
       .meta > div,
       .meta > div + div {
-        padding: 0.45rem 0;
+        padding: calc(0.45 * var(--doc-u)) 0;
         border-left: 0;
         border-top: 1px solid var(--hair);
       }
@@ -700,8 +700,8 @@ const R = WORKTIME_RULES;
       .t tfoot tr {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 0.45rem 0.75rem;
-        padding: 0.7rem 0;
+        gap: calc(0.45 * var(--doc-u)) calc(0.75 * var(--doc-u));
+        padding: calc(0.7 * var(--doc-u)) 0;
       }
       .t th,
       .t td {
@@ -723,7 +723,7 @@ const R = WORKTIME_RULES;
         content: attr(data-label);
         display: block;
         color: var(--muted, var(--color-text-muted));
-        font-size: 0.8rem;
+        font-size: calc(0.8 * var(--doc-u));
         font-weight: 400;
       }
     }

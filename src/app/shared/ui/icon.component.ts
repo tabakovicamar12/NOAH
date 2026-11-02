@@ -127,6 +127,8 @@ export type IconName = keyof typeof ICONS;
       viewBox="0 0 24 24"
       [attr.width]="size()"
       [attr.height]="size()"
+      [style.width]="scaled()"
+      [style.height]="scaled()"
       fill="none"
       stroke="currentColor"
       [attr.stroke-width]="stroke()"
@@ -167,6 +169,8 @@ export type IconName = keyof typeof ICONS;
 export class IconComponent {
   readonly name = input.required<IconName>();
   readonly size = input<number>(24);
+  /** Never smaller than asked; on a big monitor it grows with the text beside it. */
+  protected readonly scaled = computed(() => `max(${this.size()}px, ${this.size() / 16}rem)`);
   readonly stroke = input<number>(2.25);
   protected readonly nodes = computed(() => ICONS[this.name()] as unknown as ReadonlyArray<readonly [string, Readonly<Record<string, string | number | undefined>>]>);
 }

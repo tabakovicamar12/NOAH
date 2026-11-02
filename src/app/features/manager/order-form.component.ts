@@ -30,7 +30,7 @@ interface MaterialRow {
   imports: [RouterLink, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="m-page pb-32">
+    <div class="m-page fm pb-32">
       <header class="flex flex-wrap items-center gap-3">
         <a routerLink="/m" class="m-back" [attr.aria-label]="i18n.t('common.back')">
           <aon-icon name="arrow-left" [size]="20" [stroke]="2.2" />
@@ -376,6 +376,12 @@ interface MaterialRow {
     .mat-head {
       color: var(--color-text-muted);
       font-size: 0.85rem;
+    }
+    /* A form reads in a measured column; on a big monitor its fields do not run across the whole screen. */
+    .fm,
+    .form-acts {
+      max-width: 84rem;
+      margin-inline: auto;
     }
     .form-acts {
       padding-inline: var(--m-gutter);
