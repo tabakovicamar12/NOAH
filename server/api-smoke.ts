@@ -237,6 +237,43 @@ async function main(): Promise<void> {
   check('a worker entry moves the change marker', after2 > before, `${before} -> ${after2}`);
   check('workers cannot read the change marker', (await call('GET', '/manager/changes', worker)).status === 403);
 
+  // A reported problem: the manager closes it with a note, the history keeps both, the worker can also close it
+  const flagged = await newOrder('PCS', 1, 'Nalog s težavo');
+  const reportIssue = async (text: string): Promise<void> => {
+    await call('POST', '/logs', worker, { id: crypto.randomUUID(), userId: 'u-w', workOrderId: flagged.id, kind: 'ISSUE', quantity: null, text, createdAt: Date.now() });
+    await call('POST', `/work-orders/${flagged.id}/status`, worker, { status: 'ISSUE', changedAt: Date.now() });
+  };
+  await call('POST', `/work-orders/${flagged.id}/status`, worker, { status: 'IN_PROGRESS', changedAt: Date.now() });
+  await reportIssue('Manjkajo vijaki');
+  const resolveBody = (text: string): { id: string; text: string; resolvedAt: number } => ({ id: crypto.randomUUID(), text, resolvedAt: Date.now() });
+  check('a worker cannot close a problem as a manager', (await call('POST', `/work-orders/${flagged.id}/resolve`, worker, resolveBody('Rešeno'))).status === 403);
+  check('closing a problem needs a note', (await call('POST', `/work-orders/${flagged.id}/resolve`, admin, resolveBody('   '))).status === 400);
+  check('a manager closes a problem', (await call('POST', `/work-orders/${flagged.id}/resolve`, admin, resolveBody('Material dostavljen'))).status < 300);
+  const closed = (await call('GET', `/manager/work-orders/${flagged.id}`, admin)).body;
+  check('the closed order is back in progress', closed?.order?.status === 'IN_PROGRESS', String(closed?.order?.status));
+  check('the history keeps the report and the resolution', ['ISSUE', 'RESOLVED'].every((k) => closed?.logs?.some((l: { kind: string }) => l.kind === k)));
+  check('only a flagged order can be closed', (await call('POST', `/work-orders/${flagged.id}/resolve`, admin, resolveBody('Znova'))).status === 409);
+  await reportIssue('Spet manjka material');
+  const byWorker = await call('POST', '/logs', worker, { id: crypto.randomUUID(), userId: 'u-w', workOrderId: flagged.id, kind: 'RESOLVED', quantity: null, text: 'Material je prispel', createdAt: Date.now() });
+  check('a worker can record what was done', byWorker.status < 300, String(byWorker.status));
+  check('a resolution by a worker needs a note', (await call('POST', '/logs', worker, { id: crypto.randomUUID(), userId: 'u-w', workOrderId: flagged.id, kind: 'RESOLVED', quantity: null, text: ' ', createdAt: Date.now() })).status === 400);
+
+  // A status set by hand: administrators and managers, always with a reason, recorded in the history
+  const byHand = await newOrder('PCS', 1, 'Ročno stanje');
+  const setBody = (status: string, text = 'Razlog'): { id: string; status: string; text: string; changedAt: number } => ({ id: crypto.randomUUID(), status, text, changedAt: Date.now() });
+  const setStatus = (who: string, status: string, text?: string): Promise<{ status: number }> => call('POST', `/work-orders/${byHand.id}/set-status`, who, setBody(status, text));
+  check('a worker cannot set the status by hand', (await setStatus(worker, 'COMPLETED')).status === 403);
+  check('a reason is required', (await setStatus(admin, 'COMPLETED', '  ')).status === 400);
+  check('a new order cannot be reopened', (await setStatus(admin, 'IN_PROGRESS')).status === 409);
+  check('a manager can flag a problem', (await setStatus(admin, 'ISSUE')).status < 300);
+  check('a problem cannot be flagged twice', (await setStatus(admin, 'ISSUE')).status === 409);
+  check('a manager can close an order', (await setStatus(admin, 'COMPLETED')).status < 300);
+  check('a closed order cannot be closed again', (await setStatus(admin, 'COMPLETED')).status === 409);
+  check('a manager can reopen a closed order', (await setStatus(admin, 'IN_PROGRESS')).status < 300);
+  const handLog = (await call('GET', `/manager/work-orders/${byHand.id}`, admin)).body;
+  check('the reopened order is in progress', handLog?.order?.status === 'IN_PROGRESS');
+  check('the history keeps every change', ['ISSUE', 'CLOSED', 'REOPENED'].every((k) => handLog?.logs?.some((l: { kind: string }) => l.kind === k)));
+
   // Deleting: only the administrator, and only what holds no recorded work
   const spare = await newOrder('PCS', 1, 'Pomotoma ustvarjen');
   check('a worker cannot delete an order', (await call('DELETE', `/admin/work-orders/${spare.id}`, worker)).status === 403);

@@ -9,6 +9,8 @@ import type {
   AdminUsersResponse,
   AssignmentUpdate,
   ConsentRequest,
+  IssueResolveRequest,
+  OrderStatusSetRequest,
   HoursResponse,
   LoginConsents,
   LoginRequest,
@@ -34,6 +36,8 @@ import type {
 } from '../src/app/core/models/api.models';
 import {
   CONSENT_VERSION,
+  canSetOrderStatus,
+  manualStatusLogKind,
   PHOTO_CATEGORIES,
   QUANTITY_UNITS,
   ROLES,
@@ -513,6 +517,49 @@ export function createApp(config: ServerConfig): Hono<Env> {
     });
   });
 
+  // A manager closes a reported problem: the note goes in the history and work on the order can go on.
+  api.post('/work-orders/:id/resolve', async (c) => {
+    const body = await jsonBody<IssueResolveRequest>(c);
+    const me = c.get('me');
+    const id = requireId(c.req.param('id'), 'id');
+    return idempotent(c, async (db) => {
+      const current = (await db.query(`select status, site_id from work_orders where id = $1 for update`, [id]))[0];
+      if (!current) throw new HttpError(404, 'Work order not found');
+      if (!isDeskRole(me.role) || !siteInScope(await scopeOf(db, me), String(current['site_id']))) throw new HttpError(403, 'OUT_OF_SCOPE');
+      if (current['status'] !== 'ISSUE') throw new HttpError(409, 'NOT_ISSUE');
+      const text = requireString(body.text, 'text', 2000).trim();
+      if (!text) throw new HttpError(400, 'A resolution needs a note');
+      const at = requireNumber(body.resolvedAt, 'resolvedAt');
+      await db.query(
+        `insert into logs (id, user_id, work_order_id, kind, quantity, material_name, material_unit, text, created_at) values ($1, $2, $3, 'RESOLVED', null, null, null, $4, $5) on conflict (id) do nothing`,
+        [requireId(body.id, 'id'), me.id, id, text, at],
+      );
+      await db.query(`update work_orders set status = 'IN_PROGRESS', updated_at = $2 where id = $1`, [id, at]);
+    });
+  });
+
+  // A manager sets the status by hand, always with a reason. Recorded time is not touched: a running timer stays the worker's to stop.
+  api.post('/work-orders/:id/set-status', async (c) => {
+    const body = await jsonBody<OrderStatusSetRequest>(c);
+    const me = c.get('me');
+    const id = requireId(c.req.param('id'), 'id');
+    return idempotent(c, async (db) => {
+      const current = (await db.query(`select status, site_id from work_orders where id = $1 for update`, [id]))[0];
+      if (!current) throw new HttpError(404, 'Work order not found');
+      if (!canSetOrderStatus(me.role) || !siteInScope(await scopeOf(db, me), String(current['site_id']))) throw new HttpError(403, 'OUT_OF_SCOPE');
+      const kind = manualStatusLogKind(current['status'] as WorkOrderStatus, body.status);
+      if (!kind) throw new HttpError(409, 'STATUS_NOT_ALLOWED');
+      const text = requireString(body.text, 'text', 2000).trim();
+      if (!text) throw new HttpError(400, 'A reason is required');
+      const at = requireNumber(body.changedAt, 'changedAt');
+      await db.query(
+        `insert into logs (id, user_id, work_order_id, kind, quantity, material_name, material_unit, text, created_at) values ($1, $2, $3, $4, null, null, null, $5, $6) on conflict (id) do nothing`,
+        [requireId(body.id, 'id'), me.id, id, kind, text, at],
+      );
+      await db.query(`update work_orders set status = $2, updated_at = $3 where id = $1`, [id, body.status, at]);
+    });
+  });
+
   api.post('/logs', async (c) => {
     const body = await jsonBody<LogEntry>(c);
     const me = c.get('me');
@@ -522,7 +569,7 @@ export function createApp(config: ServerConfig): Hono<Env> {
       const order = (await db.query(`select planned_qty from work_orders where id = $1`, [orderId]))[0];
       if (!order) throw new HttpError(404, 'Work order not found');
       if (!(await inCrew(db, orderId, me.id))) throw new HttpError(403, 'Not in this crew');
-      if (!['QUANTITY', 'MATERIAL', 'NOTE', 'ISSUE'].includes(body.kind)) throw new HttpError(400, 'kind invalid');
+      if (!['QUANTITY', 'MATERIAL', 'NOTE', 'ISSUE', 'RESOLVED'].includes(body.kind)) throw new HttpError(400, 'kind invalid');
       let quantity: number | null = null;
       let text: string | null = null;
       let materialName: string | null = null;
@@ -554,6 +601,7 @@ export function createApp(config: ServerConfig): Hono<Env> {
         if (!updated.length) throw new HttpError(409, 'QUANTITY_BELOW_ZERO');
       } else {
         text = requireString(body.text, 'text', 2000);
+        if (body.kind === 'RESOLVED' && !text.trim()) throw new HttpError(400, 'A resolution needs a note');
       }
       await db.query(
         `insert into logs (id, user_id, work_order_id, kind, quantity, material_name, material_unit, text, created_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -846,6 +894,7 @@ export function createApp(config: ServerConfig): Hono<Env> {
       lockedCrewIds: [...new Set(timeEntries.map((e) => e.userId))],
       timeEntries,
       logs: logs.map(toLog),
+      userNames: Object.fromEntries(names),
       photos: await photoViews(photos, photoRows, names),
       summaries: summaries.map(toSummary),
     };
@@ -1239,7 +1288,7 @@ async function overview(db: Db, date: IsoDate, scope: Scope, dayStart: number): 
     ? await Promise.all([
         db.query(`select * from time_entries where work_order_id = any($1::text[])`, [orderIds]),
         db.query(`select work_order_id, count(*)::int as n from photos where work_order_id = any($1::text[]) group by work_order_id`, [orderIds]),
-        db.query(`select work_order_id, count(*)::int as n from logs where kind = 'ISSUE' and work_order_id = any($1::text[]) group by work_order_id`, [orderIds]),
+        db.query(`select l.work_order_id, count(*)::int as n from logs l where l.kind = 'ISSUE' and l.created_at > coalesce((select max(r.created_at) from logs r where r.work_order_id = l.work_order_id and r.kind in ('RESOLVED', 'CLOSED')), 0) and l.work_order_id = any($1::text[]) group by l.work_order_id`, [orderIds]),
         db.query(
           `select work_order_id from logs where work_order_id = any($1::text[]) and created_at >= $2 and created_at < $3
            union select work_order_id from photos where work_order_id = any($1::text[]) and created_at >= $2 and created_at < $3`,
@@ -1306,7 +1355,7 @@ async function projectsList(db: Db, scope: Scope): Promise<ManagerProjectsRespon
     db.query(`${SITE_SELECT} where s.active order by p.code, s.name`),
     loadOrders(db, `order by o.created_at desc`),
     db.query(`select work_order_id, started_at, ended_at from time_entries where kind = 'ORDER'`),
-    db.query(`select work_order_id, count(*)::int as n from logs where kind = 'ISSUE' group by work_order_id`),
+    db.query(`select l.work_order_id, count(*)::int as n from logs l where l.kind = 'ISSUE' and l.created_at > coalesce((select max(r.created_at) from logs r where r.work_order_id = l.work_order_id and r.kind in ('RESOLVED', 'CLOSED')), 0) group by l.work_order_id`),
     db.query(`select pm.project_id, u.id, u.display_name from project_managers pm join users u on u.id = pm.user_id where u.active order by u.display_name`),
     db.query(`select sf.site_id, u.id, u.display_name from site_foremen sf join users u on u.id = sf.user_id where u.active order by u.display_name`),
   ]);

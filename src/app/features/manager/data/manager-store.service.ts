@@ -16,11 +16,11 @@ import {
   type WorkOrderDetailResponse,
   type WorkOrderUpsert,
 } from '../../../core/models/api.models';
-import { canApproveReports, isAdmin, type IsoDate, type Project, type Site } from '../../../core/models/domain.models';
+import { canApproveReports, isAdmin, type IsoDate, type Project, type Site, type WorkOrderStatus } from '../../../core/models/domain.models';
 import { NetworkStatusService } from '../../../core/network/network-status.service';
 import { SyncEngine } from '../../../core/sync/sync-engine.service';
 import { entityKeys, queueItem } from '../../../core/sync/sync-queue';
-import { toIsoDate } from '../../../core/util/util';
+import { toIsoDate, uuid } from '../../../core/util/util';
 
 interface CachedOverview {
   readonly savedAt: number;
@@ -223,6 +223,18 @@ export class ManagerStore {
       await this.db.syncQueue.add(queueItem(uid, entityKeys.authored(body.id), { type: 'ORDER_UPSERT', payload: body }));
     });
     this.sync.nudge();
+  }
+
+  /** Closing a problem needs the server, like a review: it is the manager's word on the record. */
+  async resolveIssue(orderId: string, text: string): Promise<void> {
+    await this.api.resolveIssue(orderId, { id: uuid(), text, resolvedAt: Date.now() }, uuid());
+    await this.load();
+  }
+
+  /** A status set by hand needs the server too, for the same reason. */
+  async setOrderStatus(orderId: string, status: WorkOrderStatus, text: string): Promise<void> {
+    await this.api.setOrderStatusByHand(orderId, { id: uuid(), status, text, changedAt: Date.now() }, uuid());
+    await this.load();
   }
 
   /** A review needs the server: it is the manager's signature on someone else's record. */
