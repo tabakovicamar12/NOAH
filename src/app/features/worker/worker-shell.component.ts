@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { SessionStore } from '../../core/auth/session.store';
@@ -19,80 +20,144 @@ interface Tab {
   readonly exact: boolean;
 }
 
+/** From this size the field shell is a side rail; a phone on its side is wide but too short for one. */
+const RAIL_QUERY = '(min-width: 900px) and (min-height: 521px)';
+
 /**
- * Field shell: a dark bar with the gold wordmark, the connection line and the worker's initials, and a
- * floating dark pill in the thumb zone with the shift button in its middle. Starting and ending the shift
- * is held for a moment, so a gloved brush cannot do it by accident.
+ * Field shell. On a phone or an upright tablet: a dark bar with the gold wordmark, the connection line and the
+ * worker's initials, and a floating dark pill in the thumb zone with the shift button in its middle. On a larger
+ * screen the same places and the same shift button live in a charcoal rail, as on the manager's desk.
+ * Starting and ending the shift is held for a moment, so a gloved brush cannot do it by accident.
  */
 @Component({
   selector: 'aon-worker-shell',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, IconComponent, NetworkStatusComponent, SitePickerComponent],
+  imports: [NgTemplateOutlet, RouterOutlet, RouterLink, RouterLinkActive, IconComponent, NetworkStatusComponent, SitePickerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'mgr-ui wkr-ui block' },
+  host: { class: 'mgr-ui wkr-ui block', '[class.is-rail]': 'wide()' },
   template: `
     <a href="#worker-main" class="skip">{{ i18n.t('common.skipToContent') }}</a>
-    <div class="frame">
-      <header class="top no-print">
-        <span class="mark">AON</span>
-        <aon-network-status variant="line" [onDark]="true" />
-        <a routerLink="/w/more" class="who" [attr.aria-label]="i18n.t('worker.tabMore') + ' · ' + (session.user()?.displayName ?? '')">{{ initials() }}</a>
-      </header>
+    <ng-template #shiftButton let-wide>
+      <button
+        type="button"
+        class="shift"
+        [class.is-wide]="wide"
+        [class.is-end]="shiftMode() === 'end'"
+        [class.is-stale]="shiftMode() === 'stale'"
+        [class.is-closed]="shiftMode() === 'closed'"
+        [class.is-idle]="hold() === 0"
+        [style.--p]="hold()"
+        [disabled]="busy()"
+        [attr.aria-label]="shiftAria()"
+        (pointerdown)="holdDown($event)"
+        (pointerup)="holdUp()"
+        (pointerleave)="holdCancel()"
+        (pointercancel)="holdCancel()"
+        (keydown)="holdKeyDown($event)"
+        (keyup)="holdKeyUp($event)"
+        (blur)="holdCancel()"
+        (contextmenu)="$event.preventDefault()"
+      >
+        <span class="disc" [attr.data-burst]="burst()">
+          <span class="ring" aria-hidden="true"></span>
+          <span class="face" aria-hidden="true">
+            @if (shiftMode() === 'end') {
+              <aon-icon name="stop" [size]="20" [stroke]="2.6" />
+            } @else if (shiftMode() === 'closed') {
+              <aon-icon name="lock" [size]="20" [stroke]="2.2" />
+            } @else if (shiftMode() === 'stale') {
+              <aon-icon name="clock" [size]="22" [stroke]="2.2" />
+            } @else {
+              <aon-icon name="play" [size]="22" [stroke]="2.6" />
+            }
+          </span>
+        </span>
+        @if (wide) {
+          <span class="s-text" aria-hidden="true">
+            <span class="s-label">{{ shiftLabel() }}</span>
+            @if (shiftMode() === 'start' || shiftMode() === 'end') {
+              <span class="s-hint">{{ i18n.t('shift.holdHint') }}</span>
+            }
+          </span>
+        }
+      </button>
+    </ng-template>
+
+    <!-- One main and one outlet at every size: rotating a tablet swaps the navigation and never rebuilds the screen, so typed text stays. -->
+    <div class="frame" [class.is-rail]="wide()">
+      @if (wide()) {
+        <aside class="rail no-print">
+          <a routerLink="/w/orders" class="r-brand">AON&nbsp;<span class="r-dot">·</span>&nbsp;<span class="r-noah">NOAH</span></a>
+          <nav class="r-nav" [attr.aria-label]="i18n.t('worker.mainNav')">
+            <ul>
+              @for (tab of tabs; track tab.path) {
+                <li>
+                  <a
+                    [routerLink]="tab.path"
+                    routerLinkActive="is-active"
+                    [routerLinkActiveOptions]="{ exact: tab.exact }"
+                    #rla="routerLinkActive"
+                    [attr.aria-current]="rla.isActive ? 'page' : null"
+                    class="r-link"
+                  >
+                    <aon-icon [name]="tab.icon" [size]="22" [stroke]="1.7" />
+                    <span>{{ i18n.t(tab.label) }}</span>
+                  </a>
+                </li>
+              }
+            </ul>
+          </nav>
+          <div class="r-shift">
+            <p class="r-state">
+              @if (store.openShift(); as shift) {
+                {{ i18n.t('shift.onSince', { time: i18n.time(shift.startedAt) }) }}@if (store.shiftSiteName(); as site) {<span> · {{ site }}</span>}
+              } @else if (store.lastEndedShift(); as ended) {
+                {{ i18n.t('shift.endedAt', { time: i18n.time(ended.endedAt) }) }}
+              } @else {
+                {{ i18n.t('shift.notStarted') }}
+              }
+            </p>
+            <ng-container [ngTemplateOutlet]="shiftButton" [ngTemplateOutletContext]="{ $implicit: true }" />
+          </div>
+          <div class="r-foot">
+            <aon-network-status variant="line" [onDark]="true" align="start" placement="top" />
+            <a routerLink="/w/more" class="r-me" [attr.aria-label]="i18n.t('worker.tabMore') + ' · ' + (session.user()?.displayName ?? '')">
+              <span class="r-initials" aria-hidden="true">{{ initials() }}</span>
+              <span class="r-name">{{ session.user()?.displayName }}</span>
+            </a>
+          </div>
+        </aside>
+      } @else {
+        <header class="top no-print">
+          <span class="mark">AON</span>
+          <aon-network-status variant="line" [onDark]="true" />
+          <a routerLink="/w/more" class="who" [attr.aria-label]="i18n.t('worker.tabMore') + ' · ' + (session.user()?.displayName ?? '')">{{ initials() }}</a>
+        </header>
+      }
 
       <main id="worker-main" tabindex="-1" class="main">
         <router-outlet />
       </main>
 
-      <nav class="dock no-print" [attr.aria-label]="i18n.t('worker.mainNav')">
-        @for (tab of tabs; track tab.path; let i = $index) {
-          @if (i === 2) {
-            <span class="mid" [attr.data-burst]="burst()">
-              <button
-                type="button"
-                class="shift"
-                [class.is-end]="shiftMode() === 'end'"
-                [class.is-stale]="shiftMode() === 'stale'"
-                [class.is-closed]="shiftMode() === 'closed'"
-                [class.is-idle]="hold() === 0"
-                [style.--p]="hold()"
-                [disabled]="busy()"
-                [attr.aria-label]="shiftAria()"
-                (pointerdown)="holdDown($event)"
-                (pointerup)="holdUp()"
-                (pointerleave)="holdCancel()"
-                (pointercancel)="holdCancel()"
-                (keydown)="holdKeyDown($event)"
-                (keyup)="holdKeyUp($event)"
-                (blur)="holdCancel()"
-                (contextmenu)="$event.preventDefault()"
-              >
-                <span class="ring" aria-hidden="true"></span>
-                <span class="face" aria-hidden="true">
-                  @if (shiftMode() === 'end') {
-                    <aon-icon name="stop" [size]="20" [stroke]="2.6" />
-                  } @else if (shiftMode() === 'closed') {
-                    <aon-icon name="lock" [size]="20" [stroke]="2.2" />
-                  } @else if (shiftMode() === 'stale') {
-                    <aon-icon name="clock" [size]="22" [stroke]="2.2" />
-                  } @else {
-                    <aon-icon name="play" [size]="22" [stroke]="2.6" />
-                  }
-                </span>
-              </button>
-            </span>
+      @if (!wide()) {
+        <nav class="dock no-print" [attr.aria-label]="i18n.t('worker.mainNav')">
+          @for (tab of tabs; track tab.path; let i = $index) {
+            @if (i === 2) {
+              <span class="mid"><ng-container [ngTemplateOutlet]="shiftButton" [ngTemplateOutletContext]="{ $implicit: false }" /></span>
+            }
+            <a
+              [routerLink]="tab.path"
+              routerLinkActive="is-active"
+              [routerLinkActiveOptions]="{ exact: tab.exact }"
+              #rla="routerLinkActive"
+              [attr.aria-current]="rla.isActive ? 'page' : null"
+              class="tab"
+            >
+              <aon-icon [name]="tab.icon" [size]="22" [stroke]="1.9" />
+              <span>{{ i18n.t(tab.label) }}</span>
+            </a>
           }
-          <a
-            [routerLink]="tab.path"
-            routerLinkActive="is-active"
-            [routerLinkActiveOptions]="{ exact: tab.exact }"
-            #rla="routerLinkActive"
-            [attr.aria-current]="rla.isActive ? 'page' : null"
-            class="tab"
-          >
-            <aon-icon [name]="tab.icon" [size]="22" [stroke]="1.9" />
-            <span>{{ i18n.t(tab.label) }}</span>
-          </a>
-        }
-      </nav>
+        </nav>
+      }
     </div>
     @if (store.sitePickerOpen()) {
       <aon-site-picker />
@@ -121,8 +186,6 @@ interface Tab {
       display: flex;
       flex-direction: column;
       min-height: 100dvh;
-      max-width: 36rem;
-      margin: 0 auto;
       background: var(--color-site);
     }
     .top {
@@ -137,9 +200,6 @@ interface Tab {
       padding: calc(env(safe-area-inset-top) + 0.35rem) 0.9rem 0.35rem;
       background: var(--color-rail);
       color: #ecebe7;
-      /* the bar runs the full width of a wide screen while its content stays in the frame */
-      box-shadow: 0 0 0 100vmax var(--color-rail);
-      clip-path: inset(0 -100vmax);
     }
     /* On the narrowest phones the status gives way (ellipsis) so the initials stay whole. */
     .top aon-network-status {
@@ -262,8 +322,17 @@ interface Tab {
       place-items: center;
     }
     /* Confirmed: a wave leaves the button, gold when the day starts, white when it ends. */
-    .mid[data-burst]::before,
-    .mid[data-burst]::after {
+    .disc {
+      position: relative;
+      display: grid;
+      flex: 0 0 auto;
+      place-items: center;
+      width: 3.9rem;
+      height: 3.9rem;
+      border-radius: 9999px;
+    }
+    .disc[data-burst]::before,
+    .disc[data-burst]::after {
       content: '';
       position: absolute;
       top: 50%;
@@ -276,12 +345,12 @@ interface Tab {
       pointer-events: none;
       animation: wave 760ms linear forwards;
     }
-    .mid[data-burst]::after {
+    .disc[data-burst]::after {
       animation-delay: 110ms;
       opacity: 0;
     }
-    .mid[data-burst='end']::before,
-    .mid[data-burst='end']::after {
+    .disc[data-burst='end']::before,
+    .disc[data-burst='end']::after {
       border-color: #fff;
     }
     @keyframes wave {
@@ -365,14 +434,11 @@ interface Tab {
       color: var(--color-bad-ink);
     }
     @media (min-width: 700px) {
-      .frame {
-        max-width: 46rem;
+      .top {
+        padding-inline: 1.5rem;
       }
     }
     @media (orientation: landscape) and (min-width: 640px) and (max-height: 520px) {
-      .frame {
-        max-width: none;
-      }
       .dock {
         height: 3.9rem;
       }
@@ -382,15 +448,168 @@ interface Tab {
         font-size: 0.8rem;
       }
     }
-    @media (min-width: 900px) {
-      .frame {
-        max-width: 72rem;
-      }
-      .top {
-        padding-inline: 1.5rem;
-      }
-      .dock {
-        max-width: 34rem;
+
+    /* The rail: the same places and the same shift button, in the manager's charcoal. Still glove-sized, because a large screen can be a touch screen. */
+    .frame.is-rail {
+      display: grid;
+      grid-template-columns: 15.5rem minmax(0, 1fr);
+    }
+    .is-rail .main {
+      padding-bottom: 0;
+    }
+    .rail {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      padding: 0 0.85rem calc(env(safe-area-inset-bottom) + 0.85rem);
+      background: var(--color-rail);
+      color: var(--color-rail-text);
+    }
+    .r-brand {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      height: 5rem;
+      padding: 0 0.8rem;
+      color: #fff;
+      font-size: 1.45rem;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      text-decoration: none;
+    }
+    .r-dot {
+      color: var(--color-rail-muted);
+    }
+    .r-noah {
+      color: var(--color-gold);
+    }
+    .r-nav {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--color-rail-rule) transparent;
+    }
+    .r-nav ul {
+      display: grid;
+      gap: 0.3rem;
+    }
+    .r-link {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      min-height: 3rem;
+      padding: 0 0.8rem;
+      border-radius: 0.5rem;
+      color: var(--color-rail-text);
+      font-size: 1.05rem;
+      text-decoration: none;
+      touch-action: manipulation;
+      transition: background-color 160ms var(--ease-out-expo), color 160ms var(--ease-out-expo);
+    }
+    .r-link:hover {
+      background: var(--color-rail-hover);
+    }
+    .r-link.is-active {
+      background: var(--color-rail-active);
+      color: var(--color-gold);
+    }
+    .r-shift {
+      flex: 0 0 auto;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--color-rail-rule);
+    }
+    .r-state {
+      padding: 0 0.3rem;
+      color: var(--color-rail-muted);
+      font-size: 0.875rem;
+      line-height: 1.35;
+    }
+    .shift.is-wide {
+      display: flex;
+      justify-content: flex-start;
+      gap: 0.7rem;
+      width: 100%;
+      height: auto;
+      margin-top: 0.6rem;
+      padding: 0.3rem;
+      border-radius: 9999px;
+      background: var(--color-rail-active);
+      color: #fff;
+      text-align: left;
+    }
+    .shift.is-wide:hover:not(:disabled) {
+      background: var(--color-rail-hover);
+    }
+    .shift.is-wide:active:not(:disabled) {
+      transform: scale(0.985);
+    }
+    .s-text {
+      display: grid;
+      gap: 0.05rem;
+      min-width: 0;
+      padding-right: 0.5rem;
+    }
+    .s-label {
+      font-size: 0.95rem;
+      font-weight: 650;
+      line-height: 1.2;
+    }
+    .s-hint {
+      color: var(--color-rail-muted);
+      font-size: 0.8rem;
+    }
+    .r-foot {
+      flex: 0 0 auto;
+      display: grid;
+      gap: 0.35rem;
+      margin-top: 0.75rem;
+    }
+    .r-me {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      min-height: 3rem;
+      padding: 0 0.3rem;
+      border-radius: 0.5rem;
+      color: var(--color-rail-text);
+      text-decoration: none;
+    }
+    .r-me:hover {
+      background: var(--color-rail-hover);
+    }
+    .r-initials {
+      display: grid;
+      flex: 0 0 auto;
+      place-items: center;
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 9999px;
+      background: #3a3936;
+      color: #ecebe7;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .r-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .r-brand:focus-visible,
+    .r-link:focus-visible,
+    .r-me:focus-visible {
+      outline: 2px solid var(--color-gold);
+      outline-offset: -2px;
+      box-shadow: none;
+    }
+    @media print {
+      .frame.is-rail {
+        display: block;
       }
     }
   `,
@@ -411,6 +630,9 @@ export class WorkerShellComponent implements OnInit {
 
   protected readonly initials = computed(() => initialsOf(this.session.user()?.displayName ?? ''));
 
+  /** Whether this screen gets the rail instead of the bar and the floating pill. */
+  protected readonly wide = signal(typeof matchMedia === 'function' && matchMedia(RAIL_QUERY).matches);
+
   // ---- the shift button
   protected readonly busy = signal(false);
   /** 0 at rest, 1 when the hold is complete. */
@@ -424,12 +646,18 @@ export class WorkerShellComponent implements OnInit {
     if (!this.store.openShift() && this.store.dayClosed()) return 'closed';
     return this.store.openShift() ? 'end' : 'start';
   });
+  /** The command in words, shown beside the button in the rail. */
+  protected readonly shiftLabel = computed(() => {
+    const mode = this.shiftMode();
+    if (mode === 'stale') return this.i18n.t('shift.staleShort');
+    if (mode === 'closed') return this.i18n.t('shift.closedShort');
+    return this.i18n.t(mode === 'end' ? 'shift.end' : this.store.lastEndedShift() ? 'shift.startAgain' : 'shift.start');
+  });
   protected readonly shiftAria = computed(() => {
     const mode = this.shiftMode();
     if (mode === 'stale') return this.i18n.t('nav.staleTip');
     if (mode === 'closed') return this.i18n.t('day.closedBlock');
-    const label = this.i18n.t(mode === 'end' ? 'shift.end' : this.store.lastEndedShift() ? 'shift.startAgain' : 'shift.start');
-    return this.i18n.t('shift.holdAria', { label });
+    return this.i18n.t('shift.holdAria', { label: this.shiftLabel() });
   });
   private frame: number | null = null;
   private keyHeld = false;
@@ -437,7 +665,11 @@ export class WorkerShellComponent implements OnInit {
   private readonly holdMs = 900;
 
   constructor() {
+    const railQuery = typeof matchMedia === 'function' ? matchMedia(RAIL_QUERY) : null;
+    const onRailChange = (e: MediaQueryListEvent): void => this.wide.set(e.matches);
+    railQuery?.addEventListener('change', onRailChange);
     inject(DestroyRef).onDestroy(() => {
+      railQuery?.removeEventListener('change', onRailChange);
       this.stopFrame();
       clearTimeout(this.burstTimer);
     });

@@ -28,7 +28,7 @@ function toTimeInput(ms: number): string {
   imports: [RouterLink, HoldButtonComponent, IconComponent, ReportStatusComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="w-page">
+    <div class="w-page" [class.is-wide]="hasDay()">
       <header class="head">
         <div class="min-w-0">
           <h1 class="w-h1">{{ i18n.t('day.title') }}</h1>
@@ -37,7 +37,7 @@ function toTimeInput(ms: number): string {
         <aon-report-status [status]="status()" />
       </header>
 
-      <div class="w-stack mt-3">
+      <div class="w-stack mt-3" [class.dr-grid]="hasDay()">
         @if (summary(); as s) {
           @if (s.status === 'RETURNED') {
             <section class="w-alert" role="status">
@@ -143,7 +143,7 @@ function toTimeInput(ms: number): string {
           </section>
 
           <!-- Orders worked today -->
-          <section aria-labelledby="lines-title">
+          <section class="dr-lines" aria-labelledby="lines-title">
             <h2 id="lines-title" class="w-h2">
               {{ i18n.t('day.ordersWorked') }}
               <small>{{ i18n.t('day.onOrdersTotal', { duration: duration(view().orderMinutes) }) }}</small>
@@ -281,6 +281,28 @@ function toTimeInput(ms: number): string {
     }
     .head aon-report-status {
       margin-top: 0.3rem;
+    }
+    /* Large screen: the locked times, the comment and the submit on the left, the day's orders on the right. */
+    @media (min-width: 1100px) {
+      :host {
+        max-width: 78rem;
+        margin-inline: auto;
+      }
+      .w-stack.dr-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 24rem) minmax(0, 1fr);
+        grid-template-rows: auto auto auto auto 1fr;
+        gap: 0.95rem 1.5rem;
+        align-items: start;
+      }
+      .w-stack.dr-grid > * {
+        grid-column: 1;
+        margin-top: 0;
+      }
+      .w-stack.dr-grid > .dr-lines {
+        grid-column: 2;
+        grid-row: 1 / -1;
+      }
     }
     .locked {
       display: flex;

@@ -850,12 +850,49 @@ html.mgr-scale {
   }
 }
 
-/* Field app on a wide screen: forms and lists keep a phone-like column; home and the record use the width. */
-@media (min-width: 900px) {
-  aon-worker-shell .main > :not(aon-worker-orders, aon-work-record-page, router-outlet) {
-    display: block;
-    max-width: 36rem;
+/* Field kit on a larger screen: a readable column on a tablet; the order and the report split in two from 1100px.
+   Home and the monthly record lay out their own width. Controls keep their glove size: a big screen can be a touch screen. */
+@media (min-width: 700px) {
+  .wkr-ui .w-page {
+    max-width: 44rem;
     margin-inline: auto;
+    padding: 1.25rem 1.5rem 2rem;
+  }
+  .wkr-ui .w-slab {
+    max-width: 44rem;
+    margin-inline: auto;
+    padding-inline: 1.5rem;
+  }
+}
+@media (min-width: 1100px) {
+  .wkr-ui .w-page.is-wide {
+    max-width: 78rem;
+  }
+  .wkr-ui .w-page.is-mid {
+    max-width: 64rem;
+  }
+  .wkr-ui .w-slab {
+    max-width: 27rem;
+    margin-inline: 0;
+  }
+}
+.wkr-ui.is-rail .w-slab {
+  bottom: calc(0.5rem + env(safe-area-inset-bottom));
+}
+@media (hover: hover) {
+  .wkr-ui a.w-row:hover,
+  .wkr-ui button.w-row:hover:not(:disabled) {
+    background: var(--color-row-tint);
+  }
+  .wkr-ui .w-btn-line:hover:not(:disabled) {
+    background: var(--color-row-tint);
+  }
+  .wkr-ui .w-btn-dark:hover:not(:disabled) {
+    background: var(--color-rail-hover);
+  }
+  .wkr-ui .w-btn-gold:hover:not(:disabled),
+  .wkr-ui .w-btn-bad:hover:not(:disabled) {
+    filter: brightness(1.04);
   }
 }
 

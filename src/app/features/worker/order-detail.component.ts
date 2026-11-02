@@ -33,11 +33,11 @@ type NoteMode = 'NOTE' | 'ISSUE';
   imports: [FormsModule, RouterLink, IconComponent, OrderMaterialsComponent, OrderPhotosComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="w-page">
+    <div class="w-page is-wide">
       <a routerLink="/w/orders" class="m-back back" [attr.aria-label]="i18n.t('order.backToList')"><aon-icon name="arrow-left" [size]="20" [stroke]="2.2" /></a>
 
       @if (order(); as o) {
-        <div class="w-stack">
+        <div class="w-stack od-grid">
           <!-- The order: what, where, by when, with whom, and the time spent on it today -->
           <section class="w-card" aria-labelledby="order-code">
             <p class="no-label">{{ i18n.t('order.numberLabel', { code: o.code ?? '–' }) }}</p>
@@ -111,6 +111,8 @@ type NoteMode = 'NOTE' | 'ISSUE';
             }
           </div>
 
+          <!-- The work on the order: beside the order on a large screen, under it on a phone. -->
+          <div class="w-stack od-work">
           <!-- Quantity: only on orders measured in one; a task is done when it is completed. -->
           @if (hasQuantity(o)) {
           <section class="w-card" aria-labelledby="qty-title">
@@ -267,6 +269,8 @@ type NoteMode = 'NOTE' | 'ISSUE';
               <p class="w-small w-muted mt-3">{{ i18n.t('order.timelineEmpty') }}</p>
             }
           </section>
+
+          </div>
 
           <!-- The order as written by the manager -->
           <section class="w-card" aria-labelledby="desc-title">
@@ -513,6 +517,24 @@ type NoteMode = 'NOTE' | 'ISSUE';
       color: var(--color-text-muted);
       font-size: 0.85rem;
       text-align: center;
+    }
+    /* Large screen: the order and its description on the left, the work on the right. The last row takes the slack. */
+    @media (min-width: 1100px) {
+      .w-stack.od-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 24rem) minmax(0, 1fr);
+        grid-template-rows: auto auto auto 1fr;
+        gap: 0.95rem 1.5rem;
+        align-items: start;
+      }
+      .w-stack.od-grid > * {
+        grid-column: 1;
+        margin-top: 0;
+      }
+      .w-stack.od-grid > .od-work {
+        grid-column: 2;
+        grid-row: 1 / -1;
+      }
     }
   `,
 })

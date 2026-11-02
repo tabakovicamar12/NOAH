@@ -17,10 +17,10 @@ import { initialsOf } from '../manager/person';
   imports: [RouterLink, IconComponent, LanguageSwitchComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="w-page">
+    <div class="w-page is-mid">
       <h1 class="w-h1">{{ i18n.t('more.title') }}</h1>
 
-      <div class="w-stack mt-3">
+      <div class="w-stack mt-3 mo-grid">
         <section class="w-card" aria-labelledby="acc-title">
           <h2 id="acc-title" class="sr-only">{{ i18n.t('more.account') }}</h2>
           <div class="who">
@@ -42,7 +42,7 @@ import { initialsOf } from '../manager/person';
           </div>
         </section>
 
-        <section class="w-card" aria-labelledby="sync-title">
+        <section class="w-card mo-sync" aria-labelledby="sync-title">
           <h2 id="sync-title" class="w-h2">
             {{ i18n.t('more.sync') }}
             <small>{{ sync.lastSyncAt() ? i18n.t('net.lastSync', { time: i18n.time(sync.lastSyncAt()) }) : i18n.t('net.neverSynced') }}</small>
@@ -170,6 +170,23 @@ import { initialsOf } from '../manager/person';
       align-items: flex-start;
       gap: 0.75rem;
       cursor: pointer;
+    }
+    @media (min-width: 1100px) {
+      .w-stack.mo-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-rows: auto auto auto 1fr;
+        gap: 0.95rem 1.5rem;
+        align-items: start;
+      }
+      .w-stack.mo-grid > * {
+        grid-column: 1;
+        margin-top: 0;
+      }
+      .w-stack.mo-grid > .mo-sync {
+        grid-column: 2;
+        grid-row: 1 / -1;
+      }
     }
   `,
 })
