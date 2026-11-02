@@ -198,11 +198,17 @@ function toLocalInput(ms: number): string {
       @if (listOrders().length || activeScope()) {
         <ul class="nexts">
           @for (o of shownOrders(); track o.id) {
+            @if (o.id === firstElsewhereId()) {
+              <li class="nx-sep">{{ i18n.t('home.ordersElsewhere') }}</li>
+            }
             <li class="nx" [class.is-bad]="o.status === 'ISSUE'" [style.view-transition-name]="morphId() === o.id ? 'order-morph' : null">
               <a [routerLink]="['/w/orders', o.id]" class="nx-main" [attr.aria-label]="i18n.t('orders.open', { code: o.code ?? '' }) + ' · ' + o.title + ' · ' + i18n.t(statusKey(o.status))">
                 <span class="nx-title">{{ o.title }}</span>
                 <span class="nx-meta">
                   <span class="nx-code">{{ o.code }}</span>
+                  @if (isElsewhere(o)) {
+                    <span class="nx-site">{{ o.siteName }}</span>
+                  }
                   @if (o.status === 'ISSUE') {
                     <span class="nx-flag">{{ i18n.t(statusKey(o.status)) }}</span>
                   }
@@ -457,6 +463,10 @@ function toLocalInput(ms: number): string {
     .scope.is-set { border-color: var(--color-gold); background: var(--color-gold-fill); color: var(--color-gold-ink); }
     .scope.is-set select { font-weight: 650; }
     .nexts { display: grid; gap: 0.5rem; margin-top: 0.6rem; }
+    /* Orders on other objects than the one the shift started on: still there, but not mistaken for the work here. */
+    .nx-sep { grid-column: 1 / -1; margin-top: 0.45rem; color: var(--color-text-muted); font-size: 0.875rem; font-weight: 600; }
+    .nx-sep:first-child { margin-top: 0; }
+    .nx-site { color: var(--color-text); }
     .nx { display: flex; align-items: center; gap: 0.5rem; padding-right: 0.7rem; border-radius: 1rem; background: var(--color-panel); box-shadow: 0 1px 2px rgb(20 20 20 / 0.05); }
     .nx.is-bad { background: var(--color-bad-tint); }
     .nx-main { display: grid; flex: 1 1 auto; gap: 0.15rem; min-width: 0; min-height: 4rem; padding: 0.7rem 0 0.7rem 0.9rem; color: var(--color-text); text-decoration: none; }
@@ -698,11 +708,23 @@ export class OrdersComponent {
   });
   /** Open orders across every object, so search and sort stay put while the picker narrows the list. */
   protected readonly openCount = computed(() => this.store.orders().filter((o) => o.id !== this.runningId() && o.status !== 'COMPLETED').length);
+  /** The object the running shift started on. */
+  private readonly shiftSiteId = computed(() => this.store.openShift()?.siteId ?? null);
+  /** The worker chose an object where they have no open order: time still runs, so arrival is on record. */
+  protected readonly noOrderHere = computed(() => {
+    const site = this.shiftSiteId();
+    return !!site && !this.store.orders().some((o) => o.siteId === site && o.status !== 'COMPLETED');
+  });
+  protected isElsewhere(o: { siteId: string }): boolean {
+    const site = this.shiftSiteId();
+    return !!site && o.siteId !== site;
+  }
   /** The one thing to do now, in plain words. */
   protected readonly nextStep = computed((): { key: TranslationKey; params?: Record<string, string> } => {
     if (this.store.openShift()) {
       const active = this.store.activeOrder();
-      return active ? { key: 'home.nextWork', params: { code: active.code ?? '' } } : { key: 'home.nextPick' };
+      if (active) return { key: 'home.nextWork', params: { code: active.code ?? '' } };
+      return this.noOrderHere() ? { key: 'home.nextNoOrderHere' } : { key: 'home.nextPick' };
     }
     if (this.reportDue()) return { key: 'home.nextReport' };
     return this.store.lastEndedShift() ? { key: 'home.nextDone' } : { key: 'home.nextStart' };
@@ -721,11 +743,15 @@ export class OrdersComponent {
   protected readonly matchingOrders = computed(() => {
     const q = this.orderQuery().trim().toLocaleLowerCase();
     const list = this.listOrders().filter((o) => !q || `${o.code ?? ''} ${o.title} ${o.siteName}`.toLocaleLowerCase().includes(q));
-    return this.orderSort() === 'code'
-      ? [...list].sort((a, b) => compareCodes(a.code, b.code))
-      : [...list].sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999'));
+    const sorted =
+      this.orderSort() === 'code'
+        ? [...list].sort((a, b) => compareCodes(a.code, b.code))
+        : [...list].sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999'));
+    // During a shift, the orders on this object come first.
+    return [...sorted.filter((o) => !this.isElsewhere(o)), ...sorted.filter((o) => this.isElsewhere(o))];
   });
   protected readonly shownOrders = computed(() => (this.showAll() ? this.matchingOrders() : this.matchingOrders().slice(0, 6)));
+  protected readonly firstElsewhereId = computed(() => this.shownOrders().find((o) => this.isElsewhere(o))?.id ?? null);
 
   protected readonly hasQuantity = hasQuantity;
 

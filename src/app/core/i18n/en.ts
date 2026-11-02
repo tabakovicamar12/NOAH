@@ -141,6 +141,8 @@ export const EN: Dictionary = {
   'home.groupDone': 'Completed',
   'home.nextStart': 'To start work, hold ▶ in the menu.',
   'home.nextPick': 'Pick an order and start it.',
+  'home.nextNoOrderHere': 'You have no open order at this site. Your time is being recorded; let your manager know.',
+  'home.ordersElsewhere': 'Orders at other sites',
   'home.nextWork': 'You are on order {code}. Log the quantity as you go.',
   'home.nextReport': 'Work is done. Now submit your daily report.',
   'home.nextDone': 'Your report is in. You are done for today.',

@@ -139,6 +139,8 @@ export const SL = {
   'home.groupDone': 'Zaključeni',
   'home.nextStart': 'Za začetek dela pridržite ▶ v meniju.',
   'home.nextPick': 'Izberite nalog in ga začnite.',
+  'home.nextNoOrderHere': 'Na tem objektu nimate odprtega naloga. Čas se beleži, obvestite vodjo.',
+  'home.ordersElsewhere': 'Nalogi na drugih objektih',
   'home.nextWork': 'Delate na nalogu {code}. Količino beležite sproti.',
   'home.nextReport': 'Delo je končano. Oddajte še dnevno poročilo.',
   'home.nextDone': 'Poročilo je oddano. Za danes ste končali.',
