@@ -325,12 +325,12 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
       flex-wrap: wrap;
       align-items: flex-end;
       justify-content: space-between;
-      gap: 0.75rem 2rem;
-      padding-bottom: 0.7rem;
+      gap: calc(0.75 * var(--doc-u)) calc(2 * var(--doc-u));
+      padding-bottom: calc(0.7 * var(--doc-u));
       border-bottom: 2.5px solid var(--rule);
     }
     .kicker {
-      margin-top: 0.35rem;
+      margin-top: calc(0.35 * var(--doc-u));
       color: var(--muted);
       font-size: 7.5pt;
       letter-spacing: 0.06em;
@@ -346,7 +346,7 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
       line-height: 1.1;
     }
     .s-date {
-      margin-top: 0.15rem;
+      margin-top: calc(0.15 * var(--doc-u));
       color: var(--gold);
       font-size: 11pt;
       font-weight: 600;
@@ -355,7 +355,7 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
       text-transform: uppercase;
     }
     .s-no {
-      margin-top: 0.1rem;
+      margin-top: calc(0.1 * var(--doc-u));
       color: var(--muted);
       font-size: 8pt;
       letter-spacing: 0.04em;
@@ -367,10 +367,10 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
       border-bottom: 1px solid var(--hair);
     }
     .meta > div {
-      padding: 0.55rem 0.7rem 0.55rem 0;
+      padding: calc(0.55 * var(--doc-u)) calc(0.7 * var(--doc-u)) calc(0.55 * var(--doc-u)) 0;
     }
     .meta > div + div {
-      padding-left: 0.7rem;
+      padding-left: calc(0.7 * var(--doc-u));
       border-left: 1px solid var(--hair);
     }
     .meta dt,
@@ -383,12 +383,12 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
       text-transform: uppercase;
     }
     .meta dd {
-      margin-top: 0.1rem;
+      margin-top: calc(0.1 * var(--doc-u));
     }
     .demo {
       display: inline-block;
-      margin-top: 0.5rem;
-      padding: 0.1rem 0.5rem;
+      margin-top: calc(0.5 * var(--doc-u));
+      padding: calc(0.1 * var(--doc-u)) calc(0.5 * var(--doc-u));
       border: 1px dashed var(--rule);
       font-size: 7.5pt;
       font-weight: 600;
@@ -397,25 +397,25 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
     .figs {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
-      margin-top: 0.9rem;
+      margin-top: calc(0.9 * var(--doc-u));
       border: 1px solid var(--hair);
       border-radius: 4px;
     }
     .fig {
-      padding: 0.6rem 0.75rem 0.65rem;
+      padding: calc(0.6 * var(--doc-u)) calc(0.75 * var(--doc-u)) calc(0.65 * var(--doc-u));
     }
     .fig + .fig {
       border-left: 1px solid var(--hair);
     }
     .fig-v {
-      margin-top: 0.15rem;
+      margin-top: calc(0.15 * var(--doc-u));
       font-size: 16pt;
       font-weight: 650;
       letter-spacing: -0.02em;
       line-height: 1.05;
     }
     .fig-u {
-      margin-left: 0.2rem;
+      margin-left: calc(0.2 * var(--doc-u));
       color: var(--muted);
       font-size: 9pt;
       font-weight: 500;
@@ -425,7 +425,7 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
     }
     .pill {
       display: inline-block;
-      padding: 0.05rem 0.5rem;
+      padding: calc(0.05 * var(--doc-u)) calc(0.5 * var(--doc-u));
       border: 1px solid currentColor;
       border-radius: 9999px;
       font-size: 8pt;
@@ -443,9 +443,9 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
     }
     .flags {
       display: grid;
-      gap: 0.2rem;
-      margin-top: 0.6rem;
-      padding: 0.45rem 0.65rem;
+      gap: calc(0.2 * var(--doc-u));
+      margin-top: calc(0.6 * var(--doc-u));
+      padding: calc(0.45 * var(--doc-u)) calc(0.65 * var(--doc-u));
       border-left: 3px solid var(--bad);
       background: #fbe5e6;
       font-size: 8.4pt;
@@ -454,7 +454,7 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
       color: var(--bad);
     }
     .mt {
-      margin-top: 0.3rem;
+      margin-top: calc(0.3 * var(--doc-u));
     }
     .t {
       width: 100%;
@@ -463,7 +463,7 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
     }
     .t th,
     .t td {
-      padding: 0.3rem 0.5rem;
+      padding: calc(0.3 * var(--doc-u)) calc(0.5 * var(--doc-u));
       text-align: left;
       vertical-align: baseline;
     }
@@ -488,68 +488,68 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
       text-align: right;
     }
     .c-code {
-      width: 6.5rem;
+      width: calc(6.5 * var(--doc-u));
     }
     .t tbody {
       border-bottom: 1px solid var(--hair);
     }
     .o-row td {
-      padding-top: 0.5rem;
+      padding-top: calc(0.5 * var(--doc-u));
     }
     .o-detail td {
       padding-top: 0;
-      padding-bottom: 0.6rem;
+      padding-bottom: calc(0.6 * var(--doc-u));
     }
     .d-grid {
       display: grid;
       grid-template-columns: 1.6fr 1fr;
-      gap: 0.4rem 1.25rem;
+      gap: calc(0.4 * var(--doc-u)) calc(1.25 * var(--doc-u));
     }
     .mats li {
       display: flex;
       justify-content: space-between;
-      gap: 0.75rem;
-      padding: 0.1rem 0;
+      gap: calc(0.75 * var(--doc-u));
+      padding: calc(0.1 * var(--doc-u)) 0;
       border-bottom: 1px dotted var(--hair);
     }
     .t tfoot th,
     .t tfoot td {
-      padding-top: 0.4rem;
+      padding-top: calc(0.4 * var(--doc-u));
       border-top: 2px solid var(--rule);
       font-weight: 700;
     }
     .sec {
-      margin-top: 1.15rem;
+      margin-top: calc(1.15 * var(--doc-u));
     }
     .h {
-      margin-bottom: 0.35rem;
+      margin-bottom: calc(0.35 * var(--doc-u));
       font-size: 10.5pt;
       font-weight: 650;
     }
     .line {
-      padding: 0.55rem 0;
+      padding: calc(0.55 * var(--doc-u)) 0;
       border-top: 1px solid var(--hair);
     }
     .line-head {
       display: flex;
       flex-wrap: wrap;
       justify-content: space-between;
-      gap: 0.25rem 1rem;
-      margin-bottom: 0.2rem;
+      gap: calc(0.25 * var(--doc-u)) calc(1 * var(--doc-u));
+      margin-bottom: calc(0.2 * var(--doc-u));
     }
     .lbl {
-      margin-top: 0.35rem;
+      margin-top: calc(0.35 * var(--doc-u));
     }
     .txt {
       white-space: pre-line;
     }
     .issues {
       display: grid;
-      gap: 0.25rem;
-      margin-top: 0.15rem;
+      gap: calc(0.25 * var(--doc-u));
+      margin-top: calc(0.15 * var(--doc-u));
     }
     .issues li {
-      padding: 0.3rem 0.55rem;
+      padding: calc(0.3 * var(--doc-u)) calc(0.55 * var(--doc-u));
       border-left: 3px solid var(--bad);
       background: #fbe5e6;
     }
@@ -559,7 +559,7 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
     .photos {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 0.6rem;
+      gap: calc(0.6 * var(--doc-u));
     }
     .photos img {
       width: 100%;
@@ -568,12 +568,12 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
       border: 1px solid var(--hair);
     }
     .photos p {
-      margin-top: 0.15rem;
+      margin-top: calc(0.15 * var(--doc-u));
       font-size: 7.8pt;
     }
     .legend {
-      margin-top: 1rem;
-      padding-top: 0.5rem;
+      margin-top: calc(1 * var(--doc-u));
+      padding-top: calc(0.5 * var(--doc-u));
       border-top: 1px solid var(--hair);
       color: var(--muted);
       font-size: 7.6pt;
@@ -581,25 +581,25 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
     .sign {
       display: grid;
       grid-template-columns: 1.4fr 1.4fr 1fr;
-      gap: 1.5rem;
-      margin-top: 2rem;
+      gap: calc(1.5 * var(--doc-u));
+      margin-top: calc(2 * var(--doc-u));
     }
     .line-s {
       display: block;
-      height: 2.2rem;
+      height: calc(2.2 * var(--doc-u));
       border-bottom: 1px solid var(--rule);
     }
     .sign p {
-      margin-top: 0.25rem;
+      margin-top: calc(0.25 * var(--doc-u));
       color: var(--muted);
       font-size: 7.5pt;
     }
     .s-foot {
       display: flex;
       justify-content: space-between;
-      gap: 1rem;
-      margin-top: 1.4rem;
-      padding-top: 0.35rem;
+      gap: calc(1 * var(--doc-u));
+      margin-top: calc(1.4 * var(--doc-u));
+      padding-top: calc(0.35 * var(--doc-u));
       border-top: 1px solid var(--hair);
       color: var(--muted);
       font-size: 7pt;
@@ -610,16 +610,16 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
     @media (max-width: 700px) {
       .bar {
         position: static;
-        padding: 0.6rem 0.9rem;
+        padding: calc(0.6 * var(--doc-u)) calc(0.9 * var(--doc-u));
       }
       .bar-sub {
         display: none;
       }
       .stage {
-        padding: 0.75rem 0.5rem 2rem;
+        padding: calc(0.75 * var(--doc-u)) calc(0.5 * var(--doc-u)) calc(2 * var(--doc-u));
       }
       .paper {
-        padding: 1rem 0.9rem 1.25rem;
+        padding: calc(1 * var(--doc-u)) calc(0.9 * var(--doc-u)) calc(1.25 * var(--doc-u));
       }
       .s-titleblock {
         text-align: left;
@@ -629,7 +629,7 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
       }
       .meta > div,
       .meta > div + div {
-        padding: 0.45rem 0;
+        padding: calc(0.45 * var(--doc-u)) 0;
         border-left: 0;
         border-top: 1px solid var(--hair);
       }
@@ -678,7 +678,7 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
       .t tr.o-row {
         display: flex;
         flex-wrap: wrap;
-        column-gap: 0.6rem;
+        column-gap: calc(0.6 * var(--doc-u));
       }
       .t tr.o-row td:nth-child(2) {
         flex: 1 1 0;
@@ -689,7 +689,7 @@ type State = { readonly kind: 'LOADING' } | { readonly kind: 'ERROR' } | { reado
         color: var(--muted);
       }
       .t tr.o-row td.r {
-        padding-top: 0.1rem;
+        padding-top: calc(0.1 * var(--doc-u));
         text-align: left;
       }
       .t tr.o-row td.r + td.r::before {

@@ -43,7 +43,7 @@ function startingPassword(): string {
   imports: [IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="pp m-page pb-12">
+    <div class="pp m-page pp-cap pb-12">
       <header class="pp-head">
         <div>
           <h1 class="m-title">{{ i18n.t('people.title') }}</h1>
@@ -274,6 +274,9 @@ function startingPassword(): string {
     </div>
   `,
   styles: `
+    .pp-cap {
+      max-width: 96rem;
+    }
     .pp-head {
       display: flex;
       flex-wrap: wrap;

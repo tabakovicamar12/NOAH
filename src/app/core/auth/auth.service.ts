@@ -68,7 +68,7 @@ export class AuthService {
     if (!consents) return;
     try {
       const notice = consents.notice;
-      if (notice?.version === CONSENT_VERSION && !(await this.db.consents.get(userId))) {
+      if (notice?.version === CONSENT_VERSION && (await this.db.consents.get(userId))?.version !== CONSENT_VERSION) {
         await this.db.consents.put({ userId, version: notice.version, acceptedAt: notice.acceptedAt });
       }
     } catch (err: unknown) {

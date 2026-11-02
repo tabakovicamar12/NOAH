@@ -14,7 +14,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, input
       type="button"
       class="hold relative isolate flex w-full touch-none select-none flex-col items-center justify-center overflow-hidden rounded-[0.6rem] px-6 text-center transition-transform duration-150 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
       [class]="toneClass()"
-      [style.min-height.px]="height()"
+      [style.min-height]="'max(' + height() + 'px, ' + height() / 16 + 'rem)'"
       [disabled]="disabled()"
       [attr.aria-label]="ariaLabel() || label()"
       [attr.aria-describedby]="hintId"

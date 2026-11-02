@@ -435,6 +435,10 @@ const PRESENCE_RANK: Readonly<Record<WorkerPresence, number>> = { WORKING: 0, FI
       grid-template-columns: minmax(0, 1fr);
       min-height: 100dvh;
     }
+    .page {
+      max-width: 120rem;
+      margin-inline: auto;
+    }
     .work {
       min-width: 0;
       padding: 0.8rem var(--m-gutter) 2rem;

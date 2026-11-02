@@ -266,10 +266,11 @@ export interface ConsentRecord {
 }
 
 /**
- * Current version of the privacy notice shown on first login. Bump when the legal copy changes; every user
- * then acknowledges the new notice once. (Acknowledgement of a notice, not consent.)
+ * Current version of the privacy notice shown on first login. It is the only notice in the app: it also covers
+ * photos, so the camera opens without asking again. Bump when the legal copy changes; every user then
+ * acknowledges the new notice once. (Acknowledgement of a notice, not consent.)
  */
-export const CONSENT_VERSION = '2026-10-2';
+export const CONSENT_VERSION = '2026-11-1';
 
 
 /** Display label for an order number that the server has not issued yet. */

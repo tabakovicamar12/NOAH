@@ -285,12 +285,12 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       flex-wrap: wrap;
       align-items: flex-end;
       justify-content: space-between;
-      gap: 0.75rem 2rem;
-      padding-bottom: 0.7rem;
+      gap: calc(0.75 * var(--doc-u)) calc(2 * var(--doc-u));
+      padding-bottom: calc(0.7 * var(--doc-u));
       border-bottom: 2.5px solid var(--rule);
     }
     .rec-kicker {
-      margin-top: 0.35rem;
+      margin-top: calc(0.35 * var(--doc-u));
       color: var(--muted);
       font-size: 7.5pt;
       letter-spacing: 0.06em;
@@ -306,12 +306,12 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       line-height: 1.1;
     }
     .rec-employer {
-      margin-top: 0.15rem;
+      margin-top: calc(0.15 * var(--doc-u));
       font-size: 9pt;
       font-weight: 600;
     }
     .rec-period {
-      margin-top: 0.15rem;
+      margin-top: calc(0.15 * var(--doc-u));
       color: var(--gold);
       font-size: 11pt;
       font-weight: 600;
@@ -323,10 +323,10 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       border-bottom: 1px solid var(--hair);
     }
     .rec-meta > div {
-      padding: 0.55rem 0.7rem 0.55rem 0;
+      padding: calc(0.55 * var(--doc-u)) calc(0.7 * var(--doc-u)) calc(0.55 * var(--doc-u)) 0;
     }
     .rec-meta > div + div {
-      padding-left: 0.7rem;
+      padding-left: calc(0.7 * var(--doc-u));
       border-left: 1px solid var(--hair);
     }
     .rec-meta dt,
@@ -340,45 +340,45 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       text-transform: uppercase;
     }
     .rec-meta dd {
-      margin-top: 0.1rem;
+      margin-top: calc(0.1 * var(--doc-u));
       white-space: nowrap;
     }
     /* Key figures: four cells, the overtime ones with a meter against the legal cap. */
     .rec-figs {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      margin-top: 0.9rem;
+      margin-top: calc(0.9 * var(--doc-u));
       border: 1px solid var(--hair);
       border-radius: 4px;
     }
     .fig {
-      padding: 0.6rem 0.75rem 0.65rem;
+      padding: calc(0.6 * var(--doc-u)) calc(0.75 * var(--doc-u)) calc(0.65 * var(--doc-u));
     }
     .fig + .fig {
       border-left: 1px solid var(--hair);
     }
     .fig-v {
-      margin-top: 0.15rem;
+      margin-top: calc(0.15 * var(--doc-u));
       font-size: 17pt;
       font-weight: 650;
       letter-spacing: -0.02em;
       line-height: 1.05;
     }
     .fig-u {
-      margin-left: 0.15rem;
+      margin-left: calc(0.15 * var(--doc-u));
       color: var(--muted);
       font-size: 9pt;
       font-weight: 500;
     }
     .fig-s {
-      margin-top: 0.2rem;
+      margin-top: calc(0.2 * var(--doc-u));
       color: var(--muted);
       font-size: 7.5pt;
     }
     .meter {
       display: block;
       height: 4px;
-      margin-top: 0.35rem;
+      margin-top: calc(0.35 * var(--doc-u));
       border-radius: 2px;
       background: var(--soft);
       overflow: hidden;
@@ -398,10 +398,10 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       color: var(--bad);
     }
     .rec-sec {
-      margin-top: 1.1rem;
+      margin-top: calc(1.1 * var(--doc-u));
     }
     .rec-h {
-      margin-bottom: 0.3rem;
+      margin-bottom: calc(0.3 * var(--doc-u));
       font-size: 10.5pt;
       font-weight: 650;
     }
@@ -416,14 +416,14 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       border-collapse: collapse;
     }
     .days {
-      min-width: 40rem;
+      min-width: calc(40 * var(--doc-u));
       font-size: 8.4pt;
     }
     .days th,
     .days td,
     .checks th,
     .checks td {
-      padding: 0.2rem 0.4rem;
+      padding: calc(0.2 * var(--doc-u)) calc(0.4 * var(--doc-u));
       text-align: left;
       vertical-align: baseline;
     }
@@ -433,8 +433,8 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
     }
     .days thead th,
     .checks thead th {
-      padding-top: 0.35rem;
-      padding-bottom: 0.35rem;
+      padding-top: calc(0.35 * var(--doc-u));
+      padding-bottom: calc(0.35 * var(--doc-u));
       border-bottom: 1.5px solid var(--rule);
       white-space: nowrap;
     }
@@ -460,7 +460,7 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
     }
     .d.flag .dt {
       box-shadow: inset 2px 0 0 var(--bad);
-      padding-left: 0.35rem;
+      padding-left: calc(0.35 * var(--doc-u));
     }
     td.ot {
       color: #7a5d17;
@@ -484,7 +484,7 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       white-space: nowrap;
     }
     .orders {
-      max-width: 11rem;
+      max-width: calc(11 * var(--doc-u));
       color: #333;
     }
     .rep {
@@ -509,10 +509,10 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
     }
     .days tfoot th,
     .days tfoot td {
-      padding-top: 0.35rem;
+      padding-top: calc(0.35 * var(--doc-u));
     }
     .checks {
-      min-width: 34rem;
+      min-width: calc(34 * var(--doc-u));
       font-size: 8.6pt;
     }
     .checks tbody tr {
@@ -528,14 +528,14 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
     .res {
       display: inline-flex;
       align-items: center;
-      gap: 0.3rem;
+      gap: calc(0.3 * var(--doc-u));
       font-weight: 650;
       white-space: nowrap;
     }
     .res::before {
       content: '';
-      width: 0.5rem;
-      height: 0.5rem;
+      width: calc(0.5 * var(--doc-u));
+      height: calc(0.5 * var(--doc-u));
       border-radius: 9999px;
       background: currentColor;
     }
@@ -554,14 +554,14 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
     }
     .finds {
       display: grid;
-      gap: 0.15rem;
+      gap: calc(0.15 * var(--doc-u));
       font-size: 8.8pt;
     }
     .finds li {
       display: grid;
-      grid-template-columns: 6.5rem minmax(0, 1fr);
-      gap: 0.75rem;
-      padding: 0.25rem 0.5rem;
+      grid-template-columns: calc(6.5 * var(--doc-u)) minmax(0, 1fr);
+      gap: calc(0.75 * var(--doc-u));
+      padding: calc(0.25 * var(--doc-u)) calc(0.5 * var(--doc-u));
       border-left: 3px solid var(--hair);
     }
     .finds li[data-level='over'] {
@@ -581,37 +581,37 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       font-weight: 600;
     }
     .rec-notes {
-      margin-top: 1.1rem;
-      padding-top: 0.6rem;
+      margin-top: calc(1.1 * var(--doc-u));
+      padding-top: calc(0.6 * var(--doc-u));
       border-top: 1px solid var(--hair);
       color: var(--muted);
       font-size: 7.6pt;
     }
     .rec-notes p + p {
-      margin-top: 0.15rem;
+      margin-top: calc(0.15 * var(--doc-u));
     }
     .sign {
       display: grid;
       grid-template-columns: 1.3fr 1.3fr 0.8fr;
-      gap: 1.5rem;
-      margin-top: 2.2rem;
+      gap: calc(1.5 * var(--doc-u));
+      margin-top: calc(2.2 * var(--doc-u));
     }
     .sign .line {
       display: block;
-      height: 2.2rem;
+      height: calc(2.2 * var(--doc-u));
       border-bottom: 1px solid var(--rule);
     }
     .sign p {
-      margin-top: 0.25rem;
+      margin-top: calc(0.25 * var(--doc-u));
       color: var(--muted);
       font-size: 7.5pt;
     }
     .rec-foot {
       display: flex;
       justify-content: space-between;
-      gap: 1rem;
-      margin-top: 1.4rem;
-      padding-top: 0.35rem;
+      gap: calc(1 * var(--doc-u));
+      margin-top: calc(1.4 * var(--doc-u));
+      padding-top: calc(0.35 * var(--doc-u));
       border-top: 1px solid var(--hair);
       color: var(--muted);
       font-size: 7pt;
@@ -628,7 +628,7 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       }
       .rec-meta > div,
       .rec-meta > div + div {
-        padding: 0.45rem 0.6rem 0.45rem 0;
+        padding: calc(0.45 * var(--doc-u)) calc(0.6 * var(--doc-u)) calc(0.45 * var(--doc-u)) 0;
         border-left: 0;
         border-top: 1px solid var(--hair);
       }
@@ -647,7 +647,7 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
       }
       .sign {
         grid-template-columns: 1fr;
-        gap: 0.5rem;
+        gap: calc(0.5 * var(--doc-u));
       }
     }
     @media screen and (max-width: 1100px) {
@@ -656,7 +656,7 @@ const h = (minutes: number): string => String(Math.round((minutes / 60) * 10) / 
         position: sticky;
         left: 0;
         z-index: 1;
-        padding-right: 0.5rem;
+        padding-right: calc(0.5 * var(--doc-u));
         background: #fff;
       }
       .d.we .dt {

@@ -4,10 +4,8 @@ import { I18nService } from '../../../core/i18n/i18n.service';
 import { PHOTO_CATEGORIES, type PhotoCategory, type WorkOrderStatus } from '../../../core/models/domain.models';
 import { SessionStore } from '../../../core/auth/session.store';
 import { ToastService } from '../../../core/ui/toast.service';
-import { PrivacyPrefsService } from '../../../core/privacy/privacy-prefs.service';
 import { BlobUrls } from '../../../shared/ui/blob-urls';
 import { ConfirmDeleteComponent } from '../../../shared/ui/confirm-delete.component';
-import { NoticeSheetComponent, type NoticePoint } from '../../../shared/ui/notice-sheet.component';
 import { IconComponent } from '../../../shared/ui/icon.component';
 import { PhotoViewerComponent } from '../../../shared/ui/photo-viewer.component';
 import { WorkerStore } from '../data/worker-store.service';
@@ -29,7 +27,7 @@ const SUGGESTED: Readonly<Record<WorkOrderStatus, PhotoCategory>> = {
  */
 @Component({
   selector: 'aon-order-photos',
-  imports: [ConfirmDeleteComponent, IconComponent, PhotoReviewComponent, PhotoViewerComponent, NoticeSheetComponent],
+  imports: [ConfirmDeleteComponent, IconComponent, PhotoReviewComponent, PhotoViewerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="w-card" aria-labelledby="photos-title">
@@ -148,18 +146,6 @@ const SUGGESTED: Readonly<Record<WorkOrderStatus, PhotoCategory>> = {
         [error]="removeError()"
         (confirmed)="remove(r)"
         (cancelled)="removing.set(null)"
-      />
-    }
-
-    @if (cameraNotice()) {
-      <aon-notice-sheet
-        [heading]="i18n.t('camera.noticeTitle')"
-        icon="camera"
-        [points]="cameraPoints()"
-        [acceptLabel]="i18n.t('camera.noticeAccept')"
-        [declineLabel]="i18n.t('common.cancel')"
-        (accepted)="cameraNoticeAccepted()"
-        (declined)="cameraNotice.set(false)"
       />
     }
 
@@ -382,25 +368,16 @@ export class OrderPhotosComponent {
   protected readonly viewing = signal<LocalPhoto | null>(null);
   protected readonly reviewFile = signal<Blob | null>(null);
   protected readonly pendingCategory = signal<PhotoCategory>('IN_PROGRESS');
-  protected readonly cameraNotice = signal(false);
-  private readonly prefs = inject(PrivacyPrefsService);
   protected readonly categories = PHOTO_CATEGORIES;
   protected readonly icon = PHOTO_ICON;
   private readonly session = inject(SessionStore);
   protected readonly workerName = computed(() => this.session.user()?.displayName ?? '');
-  protected readonly cameraPoints = computed<readonly NoticePoint[]>(() => [
-    { icon: 'camera', text: this.i18n.t('camera.noticeP1') },
-    { icon: 'eye-off', text: this.i18n.t('camera.noticeP2') },
-    { icon: 'shield', text: this.i18n.t('camera.noticeP3') },
-  ]);
   /** Photos waiting for the review sheet: several picked from the gallery, dropped, or taken through "save and another". */
   private queue: Blob[] = [];
   private awaitingAnother = false;
 
   private readonly picker = viewChild.required<ElementRef<HTMLInputElement>>('picker');
   private readonly gallery = viewChild.required<ElementRef<HTMLInputElement>>('gallery');
-  /** Which picker the camera notice should open once accepted. */
-  private wantGallery = false;
   private readonly urls = new BlobUrls();
 
   protected readonly suggestion = computed(() => SUGGESTED[this.order().status]);
@@ -448,19 +425,7 @@ export class OrderPhotosComponent {
 
   protected open(c: PhotoCategory): void {
     this.pendingCategory.set(c);
-    this.wantGallery = false;
-    if (!this.prefs.cameraNoticeSeen()) {
-      this.cameraNotice.set(true);
-      return;
-    }
     this.picker().nativeElement.click();
-  }
-
-  /** The notice's button is the user gesture that opens the camera, so the camera opens on that tap. */
-  protected cameraNoticeAccepted(): void {
-    this.prefs.acknowledgeCamera();
-    this.cameraNotice.set(false);
-    (this.wantGallery ? this.gallery() : this.picker()).nativeElement.click();
   }
 
   protected picked(event: Event): void {
@@ -520,11 +485,6 @@ export class OrderPhotosComponent {
   /** Existing photos from the phone's gallery, several at once. */
   protected fromGallery(): void {
     this.pendingCategory.set(this.suggestion());
-    this.wantGallery = true;
-    if (!this.prefs.cameraNoticeSeen()) {
-      this.cameraNotice.set(true);
-      return;
-    }
     this.gallery().nativeElement.click();
   }
   /** Own photos can go until the day's report is submitted; after that they belong to what the manager signs. */
